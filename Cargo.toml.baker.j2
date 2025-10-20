@@ -1,0 +1,51 @@
+[package]
+name = "{{project_name}}"
+version = "{{project_version}}"
+edition = "{{project_edition}}"
+publish = false
+
+[workspace]
+members = [".", "migration"]
+
+[profile.release]
+codegen-units = 1
+lto = true
+strip = true
+debug = false
+panic = "abort"
+
+[dependencies]
+dotenvy = "0.15"
+axum = { version = "0.8" }
+{% if authentication=='oauth2'-%}
+axum-oidc = "0.6"
+tower = "0.5"
+tower-sessions = "0.14"
+{% endif %}
+anyhow = "1.0"
+hyper = "1.6"
+serde = "1.0"
+serde_json = "1.0"
+
+{% if database=='postgres' -%}
+sea-orm = { version = "1.1", features = ["sqlx-postgres","runtime-tokio-rustls","macros","with-chrono","with-json","with-uuid"] }
+sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "postgres", "migrate", ] }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.17", features = ["v4", "serde","fast-rng"] }
+utoipa = { version = "5.4", features = ["axum_extras", "uuid", "chrono"] }
+utoipa-axum = "0.2"
+utoipa-scalar = { version = "0.3", features = ["axum"] }
+{% endif -%}
+{{ 'crudcrate = { version = "0.5", features = ["postgresql","sqlite"] }' if crudcrate -}}
+
+{% if 'grpc'==protocol -%}
+prost = "0.13"
+tonic = "0.13"
+prost-types = "0.13"
+{% endif %}
+tokio = { version = "1.47", features = ["full", "tracing"] }
+
+{% if 'grpc'==protocol -%}
+[build-dependencies]
+tonic-build = "0.13"
+{% endif -%}

@@ -1,0 +1,79 @@
+schemaVersion: v1
+template_globs:
+  - "**/*.jinja"
+  - "*.jinja"
+
+questions:
+  project_name:
+    type: str
+    help: Please enter the name of your application
+    default: "my_app"
+
+  project_author:
+    type: str
+    help: "Please enter the author's name for {{project_name}}"
+
+  project_version:
+    type: str
+    help: Please enter the version of the project
+    default: "0.1.0"
+
+  project_edition:
+    type: str
+    help: Please enter the edition of the project
+    default: "2021"
+
+  authentication:
+    type: str
+    help: What authentication method do you want to use?
+    default: oauth2
+    choices:
+      - oauth2
+      - none
+
+  database:
+    type: str
+    help: What database do you want to use?
+    default: postgres
+    choices:
+      - postgres
+
+  features:
+    type: str
+    help: What features do you want to enable?
+    multiselect: true
+    default:
+      - open-telemetry
+    choices:
+      - open-telemetry
+
+  protocol:
+    type: str
+    help: What protocol to generate the API with?
+    default: rest
+    choices:
+      - rest
+      - grpc
+
+  crudcrate:
+    type: bool
+    help: Do you want to use crudcrate for generation of rest controllers?
+    default: true
+    ask_if: protocol == 'rest'
+
+  entities:
+    type: json
+    help: Configure your entities
+    schema: |
+        {
+          "type": "object",
+          "patternProperties": {
+            "^.+$": {
+              "$ref": "https://json-schema.org/draft/2020-12/schema"
+            }
+          },
+          "additionalProperties": false
+        }
+    default: |
+      {
+      }

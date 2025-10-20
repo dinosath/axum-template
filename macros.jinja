@@ -1,0 +1,469 @@
+{% macro map_to_name_and_relation(name_and_property) -%}
+    {% set name = name_and_property[0] -%}
+    {% set property = name_and_property[1] -%}
+    {% set relation = get_relation(property) -%}
+    {% set relation_type = get_relation_type(property) -%}
+
+    {
+        "name": name,
+        "relation": relation,
+        "x-relationship": relation_type
+    }
+{% endmacro %}
+
+{%- macro get_migration_type(name, property, required) -%}
+{% filter trim -%}
+    {% if property.type and property.type == "string" -%}
+        {%- if property.format and property.format == "uuid" -%}
+            uuid
+        {%- elif property.format and property.format == "date-time" -%}
+            timestamp_with_time_zone
+        {%- elif property.format and property.format == "date" -%}
+            date_time
+        {%- elif property.format and property.format == "time" -%}
+            time
+        {%-elif property.enum %}
+            enumeration
+        {%- else -%}
+            string
+        {%- endif -%}    
+    {%- elif property.type and property.type == "boolean" -%}
+        boolean
+    {%- elif property.type and property.type == "integer" -%}
+        {%- set min = property.minimum or property.exclusiveMinimum -%}
+        {%- set max = property.maximum or property.exclusiveMaximum -%}
+        {%- if min and min >= 0 -%}
+            {%- if max and max <= 255 -%}
+                tiny_unsigned
+            {%- elif max and max <= 65535 -%}
+                small_unsigned
+            {%- elif max and max <= 4294967295 -%}
+                unsigned
+            {%- else -%}
+                big_unsigned
+            {%- endif -%}
+        {%- else -%}
+            {%-if max and max <= 127 -%}
+                tiny_integer
+            {%-elif max and max <= 32767 -%}
+                small_integer
+            {%-elif max and max <= 2147483647 -%}
+                integer
+            {%-else -%}
+                big_integer
+            {%- endif -%}
+        {%- endif -%}
+    {%-elif property.type and property.type == "number" -%}
+        {%-set min = property.minimum or property.exclusiveMinimum -%}
+        {%-set max = property.maximum or property.exclusiveMaximum -%}
+        {%-if min or max -%}
+            {%-if min and min >= -3.40282347 and max and max <= 3.40282347 -%}
+                float
+            {%-else -%}
+                double
+            {%-endif -%}
+        {%-else -%}
+            double
+        {%-endif -%}
+    {%-elif property.enum %}
+        enumeration
+    {%-elif property['x-relationship'] and property['$ref'] -%}
+        unsigned
+    {%- else -%}
+        string
+    {%- endif -%}
+    {%- if name not in required -%}
+    _null
+    {%-endif -%}
+{%-endfilter %}
+{%- endmacro -%}
+
+{%- macro get_type(name, property, required=false) -%}
+{% filter trim %}
+    {# Improved type mapping for Rust types #}
+    {%- set type = None -%}
+    {%- if property['x-relationship'] == 'many-to-one' -%}
+        {%- set type = 'i32' -%}
+    {%- elif property['x-relationship'] == 'one-to-many' -%}
+        {%- set type = 'Vec<i32>' -%}
+    {%- elif property['x-relationship'] == 'many-to-many' -%}
+        {%- set type = 'Vec<i32>' -%}
+    {%- elif property.enum is defined and property.enum|length > 0 -%}
+        {%- set type = name | pascal_case -%}
+    {%- elif property.type == 'string' -%}
+        {%- if property.format == 'uuid' -%}
+            {%- set type = 'Uuid' -%}
+        {%- elif property.format == 'date-time' -%}
+            {%- set type = 'DateTime<Utc>' -%}
+        {%- elif property.format == 'date' -%}
+            {%- set type = 'NaiveDate' -%}
+        {%- elif property.format == 'time' -%}
+            {%- set type = 'TimeTime' -%}
+        {%- elif property.format in ['email', 'url'] -%}
+            {%- set type = 'String' -%}
+        {%- else -%}
+            {%- set type = 'String' -%}
+        {%- endif -%}
+    {%- elif property.type == 'boolean' -%}
+        {%- set type = 'bool' -%}
+    {%- elif property.type == 'integer' -%}
+        {%- set min = property.minimum if property.minimum is defined else property.exclusiveMinimum if property.exclusiveMinimum is defined else None -%}
+        {%- set max = property.maximum if property.maximum is defined else property.exclusiveMaximum if property.exclusiveMaximum is defined else None -%}
+        {%- if min is not none and min >= 0 -%}
+            {%- if max is not none and max <= 255 -%}
+                {%- set type = 'i8' -%}
+            {%- elif max is not none and max <= 65535 -%}
+                {%- set type = 'i16' -%}
+            {%- elif max is not none and max <= 4294967295 -%}
+                {%- set type = 'i32' -%}
+            {%- elif max is not none and max <= 9223372036854775807 -%}
+                {%- set type = 'i64' -%}
+            {%- else -%}
+                {%- set type = 'i32' -%}
+            {%- endif -%}
+        {%- else -%}
+            {%- if max is not none and max <= 127 -%}
+                {%- set type = 'i8' -%}
+            {%- elif max is not none and max <= 32767 -%}
+                {%- set type = 'i16' -%}
+            {%- elif max is not none and max <= 2147483647 -%}
+                {%- set type = 'i32' -%}
+            {%- else -%}
+                {%- set type = 'i64' -%}
+            {%- endif -%}
+        {%- endif -%}
+    {%- elif property.type == 'number' -%}
+        {%- set min = property.minimum if property.minimum is defined else property.exclusiveMinimum if property.exclusiveMinimum is defined else None -%}
+        {%- set max = property.maximum if property.maximum is defined else property.exclusiveMaximum if property.exclusiveMaximum is defined else None -%}
+        {%- if min is not none and min >= -3.40282347 and max is not none and max <= 3.40282347 -%}
+            {%- set type = 'f32' -%}
+        {%- else -%}
+            {%- set type = 'f64' -%}
+        {%- endif -%}
+    {%- elif property['$ref'] is defined and property['x-relationship'] is not defined -%}
+        {%- set type = name | pascal_case -%}
+    {%- else -%}
+        {%- set type = 'String' -%}
+    {%- endif -%}
+    {%- if not required -%}
+        Option<{{ type }}>
+    {%- else -%}
+        {{ type }}
+    {%- endif -%}
+{% endfilter %}
+{%- endmacro -%}
+
+
+{% macro validations(name, property) -%}
+    {% if property and property['x-unique'] %}
+    #[sea_orm(unique)]
+    {%- endif -%}
+{% endmacro -%}
+
+{%- macro get_type_with_option(name, property, required_fields) -%}
+{% set required = required_fields and name and name in required_fields -%}
+{% if not required -%}Option<{% endif -%}
+{{ get_type(name,property) }}
+{%- if not required -%}>{% endif -%}
+{%- endmacro -%}
+
+{%- macro get_relation(property) -%}{%- filter trim -%}
+{% if relation_is_many_to_many(property)=='true' -%}
+{{ property['items']['$ref'] | split(".") | first }}
+{% elif relation_is_many_to_one(property)=='true' or relation_is_one_to_many(property)=='true' -%}
+{{ property['$ref'] | split(".")|first }}
+{%- endif -%}
+{%- endfilter -%}{%- endmacro -%}
+
+{%- macro get_relation_type(property) -%}
+{%- filter trim -%}
+    {% if relation_is_many_to_many(property)=='true' -%}
+    {{ property['items']['x-relationship'] }}
+    {% elif relation_is_many_to_one(property)=='true' or relation_is_one_to_many(property)=='true' -%}
+    {{ property['x-relationship'] }}
+    {%- endif -%}
+{%- endfilter -%}
+{%- endmacro -%}
+
+{%- macro get_relation_from_string(string) -%}
+{{ string | split(".") | first }}
+{%- endmacro -%}
+
+
+{%- macro relation_is_many_to_one(property) -%}
+{{ 'x-relationship' in property and property['x-relationship']=="many-to-one" }}
+{%- endmacro -%}
+
+{%- macro relation_is_one_to_many(property) -%}
+{{ 'x-relationship' in property and property['x-relationship']=="one-to-many"}}
+{%- endmacro -%}
+
+{%- macro relation_is_many_to_many(property) -%}
+{%- filter trim -%}
+{%- if 'type' in property and property.type == "array" and 'items' in property and 'x-relationship' in property and '$ref' in property.items and property['x-relationship'] == "many-to-many" -%}
+  {{ true }}
+{% else -%}
+  {{ false }}
+{% endif -%}
+{%- endfilter -%}
+{%- endmacro -%}
+
+{%- macro is_relation(property) -%}
+{{ relation_is_many_to_one(property)=='true' or relation_is_one_to_many(property)=='true' or relation_is_many_to_many(property)=='true'  }}
+{%- endmacro -%}
+
+{%- macro get_m2m_relation(property) -%}{%- filter trim -%}
+{% if relation_is_many_to_many(property)=='true' -%}
+{{ property.items['$ref'] | split(".") | first }}
+{%- endif -%}
+{%- endfilter -%}{%- endmacro -%}
+
+{%- macro get_m2m_relation_model(name,property) -%}{%- filter trim -%}
+{% if relation_is_many_to_many(property)=='true' -%}
+{{ [ name | lower, get_relation(property) | lower ] | sort | join('_') }}
+{%- endif -%}
+{%- endfilter -%}{%- endmacro -%}
+
+{%- macro get_all_relations(entity) -%}
+{% set created_relations = [] -%}
+{% if entity.properties | items  -%}
+    {% for name,property in entity.properties | items  -%}
+        {% if relation_is_many_to_many(property)=='true' -%}
+            {% set relation = get_m2m_relation(property) | trim -%}
+            {% set created_relations = created_relations | concat(relation) -%}
+        {% elif is_relation(property=property) -%}
+            {% set relation = get_relation(property) | trim -%}
+            {% set created_relations = created_relations | concat(relation) -%}
+        {% endif -%}
+    {% endfor -%}
+{% endif -%}
+{{created_relations | unique | sort | join(",")}}
+{%- endmacro -%}
+
+{%- macro get_m2m_relations(entities) -%}
+{% set ns = namespace(m2m_relations=[]) %}
+{% for entity_name,entity in entities | items -%}
+    {% if entity.properties  %}
+        {% for name,property in entity.properties | items  -%}
+            {% set relation = get_m2m_relation(property) -%}
+            {% if relation!='' -%}
+                {% set m2m_relation = [entity.title|lower,relation|lower]|sort|join('_') -%}
+                {% set ns.m2m_relations = ns.m2m_relations + [m2m_relation] -%}
+            {% endif -%}
+        {% endfor -%}
+    {% endif -%}
+{% endfor -%}
+{{ ns.m2m_relations | unique | join(',') }}
+{%- endmacro -%}
+
+{%- macro get_m21_relations(entity) -%}
+{% set created_relations = [] -%}
+{% if entity.properties | items  -%}
+    {% for name,property in entity.properties | items  -%}
+        {% if relation_is_many_to_one(property=property) -%}
+            {% set relation = get_relation(property) | trim -%}
+            {% set created_relations = created_relations | concat(relation) -%}
+        {% endif -%}
+    {% endfor -%}
+{% endif -%}
+{{created_relations | unique | sort | join(",")}}
+{%- endmacro -%}
+
+
+{%- macro has_many_to_one_relation(entity) -%}
+{%- set has_many_to_one_relation = false -%}
+{% for name,property in entity.properties | items  -%}
+    {% if relation_is_many_to_one(property=property) -%}
+        {%- set has_many_to_one_relation = true -%}
+        {% break -%}
+    {% endif -%}
+{% endfor -%}
+{{ has_many_to_one_relation }}
+{%- endmacro -%}
+
+{%- macro has_many_to_many_relation(entity) -%}
+{%- set has_many_to_many_relation = false -%}
+{% for name,property in entity.properties | items  -%}
+    {% if relation_is_many_to_many(property)=='true' -%}
+        {%- set has_many_to_many_relation = true -%}
+        {% break -%}
+    {% endif -%}
+{% endfor -%}
+{{ has_many_to_many_relation }}
+{%- endmacro -%}
+
+{%- macro has_one_to_many_relation(entity) -%}
+{%- set has_one_to_many_relation = false -%}
+{% for name,property in entity.properties | items  -%}
+    {% if relation_is_one_to_many(property=property) -%}
+        {%- set has_one_to_many_relation = true -%}
+        {% break -%}
+    {% endif -%}
+{% endfor -%}
+{{ has_one_to_many_relation }}
+{%- endmacro -%}
+
+{%- macro enum_imports(entity) -%}
+{%- for name,property in entity.properties | items -%}
+    {%- if property['$ref'] and not property['x-relationship'] -%}
+        {{ "use crate::models::enums::" ~ name | snake_case ~ "::{" ~ name | pascal_case ~ "};" }}
+    {%- endif -%}
+{%- endfor -%}
+{%- endmacro -%}
+
+{%- macro seaorm_prelude_imports(entity) -%}
+{%- set possible_imports = ['TimeDate','TimeTime'] -%}
+{%- set imports = entity.properties | items | map(attribute='type') | select("in", possible_imports) -%}
+{{ "use sea_orm::prelude::{DateTimeWithTimeZone, " ~ use_imports | join(",") ~ "};"}}
+{%- endmacro -%}
+
+{% macro get_m21_relations_type(entity) -%}
+{% set ns = namespace(relations=[]) %}
+{% if entity and entity.properties | items  -%}
+{% for name, property in entity.properties | items  -%}
+{% if relation_is_many_to_one(property=property) -%}
+{% set relation = get_relation(property) -%}
+{% set ns.relations = ns.relations + [relation] -%}
+{% endif -%}
+{% endfor -%}
+{% endif -%}
+{{ ns.relations | join(",")}}
+{% endmacro -%}
+
+{% macro m21_relation_equal_name(name,property) -%}
+{% filter trim -%}
+{{ relation_is_many_to_one(property=property) and  get_relation(property)|snake_case==name|snake_case }}
+{% endfilter -%}
+{% endmacro -%}
+
+{% macro is_enum(property) -%}
+{% if property.enum and property.enum|length > 0 -%}
+true
+{% endif -%}
+{% endmacro -%}
+
+{% macro get_table_name(entity_name) -%}
+{% filter trim -%}
+{{ entity_name | plural | snake_case }}
+{% endfilter -%}
+{% endmacro -%}
+
+{%- macro chrono_imports(entity) -%}
+{%- set ns = namespace(chrono_types=['DateTime', 'Utc']) -%}
+{%- for name, property in entity.properties | items -%}
+    {%- if property.type == 'string' and property.format == 'date' and 'NaiveDate' not in ns.chrono_types -%}
+        {%- set ns.chrono_types = ns.chrono_types + ['NaiveDate'] -%}
+    {%- endif -%}
+    {%- if property.type == 'string' and property.format == 'time' and 'TimeTime' not in ns.chrono_types -%}
+        {%- set ns.chrono_types = ns.chrono_types + ['TimeTime'] -%}
+    {%- endif -%}
+{%- endfor -%}
+{%- if ns.chrono_types | length > 0 -%}
+use chrono::{ {{ ns.chrono_types | join(', ') }} };
+{%- endif -%}
+{%- endmacro -%}
+
+{#-
+    Macro: rust_var(name)
+
+    Purpose:
+        Transforms an arbitrary string into a valid Rust variable name.
+
+    Rules applied:
+        1. Converts the string to lowercase.
+        2. Replaces spaces and most punctuation with underscores ("_").
+        3. Collapses consecutive underscores into a single underscore.
+        4. Trims leading and trailing underscores.
+        5. If the result is empty, it becomes "_".
+        6. If the name starts with a digit, prefixes an underscore ("_").
+        7. If the name is a reserved Rust keyword, prefixes an underscore ("_").
+
+    Rust keywords handled:
+        as, break, const, continue, crate, else, enum, extern, false, fn, for, if,
+        impl, in, let, loop, match, mod, move, mut, pub, ref, return, self, Self,
+        static, struct, super, trait, true, type, unsafe, use, where, while,
+        async, await, dyn
+
+    Examples:
+        {{ rust_var("9:16") }}        → "_9_16"
+        {{ rust_var("fn") }}          → "_fn"
+        {{ rust_var("let") }}         → "_let"
+        {{ rust_var("Hello.World") }} → "hello_world"
+        {{ rust_var("Rust@2025!") }}  → "rust_2025_"
+-#}
+{% macro rust_var(name,enum=false) -%}
+    {%- set var = name|string-%}
+
+    {# Replace common non-identifier chars with "_" #}
+    {%- set var = var
+        | replace(" ", "_")
+        | replace("-", "_")
+        | replace(":", "_")
+        | replace("/", "_")
+        | replace("\\", "_")
+        | replace(".", "_")
+        | replace(",", "_")
+        | replace(";", "_")
+        | replace("+", "_")
+        | replace("*", "_")
+        | replace("@", "_")
+        | replace("#", "_")
+        | replace("$", "_")
+        | replace("%", "_")
+        | replace("^", "_")
+        | replace("&", "_")
+        | replace("(", "_")
+        | replace(")", "_")
+        | replace("[", "_")
+        | replace("]", "_")
+        | replace("{", "_")
+        | replace("}", "_")
+        | replace("|", "_")
+        | replace("?", "_")
+        | replace("!", "_")
+        | replace("'", "_")
+        | replace('"', "_")
+        | replace("<", "_")
+        | replace(">", "_")
+        | replace("~", "_")
+        | replace("`", "_")
+    -%}
+
+    {%- if enum -%}
+        {%- set var = var | pascal_case -%}
+    {%- else -%}
+        {%- set var = var | snake_case -%}
+    {%- endif -%}
+
+    {# Collapse multiple underscores #}
+    {%- for _ in range(6) -%}
+        {%- set var = var | replace("__", "_") -%}
+    {%- endfor -%}
+
+    {# Trim leading/trailing "_" #}
+    {%- set var = var | trim("_") -%}
+
+    {# Fallback if empty #}
+    {%- if var == "" -%}
+        {%- set var = "_" -%}
+    {%- endif -%}
+
+    {# If first char is a digit, prefix "_" #}
+    {%- if var and (var[0] in "0123456789") -%}
+        {%- set var = "_" ~ var -%}
+    {%- endif -%}
+
+    {# Reserved Rust keywords #}
+    {%- set keywords = [
+        "as","break","const","continue","crate","else","enum","extern","false","fn",
+        "for","if","impl","in","let","loop","match","mod","move","mut","pub","ref",
+        "return","self","self","static","struct","super","trait","true","type",
+        "unsafe","use","where","while","async","await","dyn"
+    ] -%}
+
+    {%- if var in keywords -%}
+        {%- set var = "_" ~ var -%}
+    {%- endif -%}
+
+    {{- var -}}
+{%- endmacro %}
