@@ -58,7 +58,7 @@ questions:
   crudcrate:
     type: bool
     help: Do you want to use crudcrate for generation of rest controllers?
-    default: true
+    default: false
     ask_if: protocol == 'rest'
 
   entities:

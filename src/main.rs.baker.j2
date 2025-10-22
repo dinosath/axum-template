@@ -1,11 +1,11 @@
+use app_state::AppState;
+use axum::{ {% if protocol=='rest' and authentication=='oauth2'-%}error_handling::HandleErrorLayer, http::Uri, response::IntoResponse,{% endif %} Router};
 {% if protocol=='rest' and authentication=='oauth2'-%}
-use axum::{
-    error_handling::HandleErrorLayer, http::Uri, response::IntoResponse
-};
 use axum_oidc::{
     error::MiddlewareError, EmptyAdditionalClaims, OidcAuthLayer, OidcLoginLayer
 };
 {% endif -%}
+use log::{info, error};
 {% if database=='postgres' -%}
 use sea_orm::{Database, DatabaseConnection};
 use sqlx::postgres::PgPoolOptions;
@@ -26,6 +26,7 @@ use utoipa_scalar::{Scalar, Servable};
 {{ 'mod service;' if protocol=='grpc' }}
 {{ 'mod models;' if database=='postgres' }}
 {{ 'mod controllers;' if protocol=='rest' and crudcrate==false }}
+mod app_state;
 
 #[derive(OpenApi)]
 #[openapi()]
@@ -34,20 +35,28 @@ struct ApiDoc;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenvy::dotenv().ok();
+    env_logger::init();
+
+    {% if database=='postgres'-%}
     let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432".to_string());
     let db: DatabaseConnection = Database::connect(&database_url).await?;
 
-    println!("🔄 Running database migrations...");
+    info!("🔄 Running database migrations...");
     let pool = PgPoolOptions::new()
         .max_connections(5)
         .connect(&database_url)
         .await?;
 
-    sqlx::migrate!("./migrations")
+    if let Err(e) = sqlx::migrate!("./migrations")
         .run(&pool)
-        .await?;
+        .await
+    {
+        error!("❌ Failed to run database migrations: {}", e);
+        return Err(e.into());
+    }
 
-    println!("✅ Database migrations completed successfully!");
+    info!("✅ Database migrations completed successfully!");
+    {% endif -%}
 
     {% if protocol=='rest' and authentication=='oauth2'-%}
     let app_url = env::var("APP_URL").expect("APP_URL env variable");
@@ -82,16 +91,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .await
             .unwrap(),
         );
-
     {% endif -%}
-
-
-    let (router, apidocs) = OpenApiRouter::with_openapi(ApiDoc::openapi())
+    let state = AppState {  {{ 'db' if database=='postgres' -}} };
+    let app_router = Router::new()
         {% for entity_name,entity in entities | items -%}
-        .merge(models::{{entity_name | snake_case}}::router_with_path(&db, "/api/{{entity_name | plural | kebab_case}}"))
+        .merge(controllers::{{entity_name | snake_case}}::routes())
         {% endfor -%}
-        .split_for_parts();
-    let app_router = router.merge(Scalar::with_url("/docs", apidocs));
+        .with_state(state);
 
     {% if protocol=='rest' and authentication=='oauth2'-%}
     let app_router = app_router
@@ -100,8 +106,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .layer(session_layer);
     {% endif -%}
 
-    let listener = TcpListener::bind("[::]:8080").await.unwrap();
-    println!("🚀🚀🚀 Started axum web server on port 8080.");
+    let port = env::var("PORT").unwrap_or_else(|_| "8080".to_string());
+    let listener = TcpListener::bind(format!("[::]:{}",port)).await.unwrap();
+    info!("🚀🚀🚀 Started axum web server on port 8080.");
     axum::serve(listener, app_router).await?;
     Ok(())
 }

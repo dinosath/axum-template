@@ -3,95 +3,221 @@
 {% set table_name = macros.get_table_name(entity_name) -%}
 {% set module_name = file_name | pascal_case -%}
 {% set model = entity_name | plural | pascal_case -%}
-use uuid::Uuid;
-use std::collections::HashSet;
-use anyhow::{anyhow, Error, Context};
-use spring_web::{get, post, put, delete,axum::response::{IntoResponse, Json},error::Result,extractor::{Component, Path, Query},};
-use spring_sea_orm::{pagination::Pagination,DbConn, };
+use serde_json::json;
+use axum::{Router, extract::{Path, State}, http::StatusCode, routing::{delete, get, patch, post, put}, response::IntoResponse, Json};
 use serde::{Deserialize, Serialize};
-use sea_orm::{ActiveModelTrait, ModelTrait, EntityTrait, Set, IntoActiveModel, Statement, FromQueryResult, ConnectionTrait};
+use sea_orm::{ActiveModelTrait, ModelTrait, EntityTrait, Set, IntoActiveModel, ConnectionTrait};
+use sea_orm::EntityLoaderTrait;
+use sea_orm::prelude::*;
 {{ macros.seaorm_prelude_imports(entity) | trim }}
-use crate::models::{{ file_name }}::{ActiveModel, Entity, Model, get_all_handler, get_one_handler, create_one_handler, update_one_handler, delete_one_handler, {{model}}, {{model}}Create, {{model}}Update};
-use super::utils::{ListParams};
+use crate::app_state::AppState;
+use crate::models::{{ file_name }}::{ActiveModel, Entity, Model, ModelEx};
 
-{% set m2m_relationships = entity.properties | items | selectattr('1.x-relationship', 'equalto', 'many-to-many') | map(attribute='0') -%}
+#[derive(Clone, Debug, Serialize)]
+pub struct {{ entity_name | pascal_case }} {
+    pub id: i32,
+    pub created_at: DateTime,
+    pub last_updated: DateTime,
+    {% for name, property in entity.properties | items -%}
+    {%- if property.writeOnly -%}{% continue -%}{%- endif -%}
+    {%- if macros.relation_is_many_to_many(property)=='true' or macros.relation_is_one_to_many(property=property)=='true'-%}
+    {% continue -%}
+    {% elif property.type -%}
+    pub {{ macros.rust_var(name,false) }}: {{ macros.get_rust_type(name, property, name in entity.required) }} {{ ',' if not loop.last }}
+    {% endif -%}
+    {% endfor %}
+}
 
-async fn load_item<C>(db: &C, id: Uuid) -> Result<Model>
+impl From<Model> for {{ entity_name | pascal_case }} {
+    fn from(model: Model) -> Self {
+        Self {
+            id: model.id,
+            created_at: model.created_at,
+            last_updated: model.last_updated,
+            {% for name, property in entity.properties | items -%}
+            {%- if property.writeOnly or macros.relation_is_many_to_many(property)=='true' or macros.relation_is_one_to_many(property=property)=='true'-%}
+            {% continue -%}
+            {% elif property.type -%}
+            {{ macros.rust_var(name,false) }}: model.{{ macros.rust_var(name,false) }},
+            {% endif -%}
+            {% endfor %}
+        }
+    }
+}
+
+impl From<ModelEx> for {{ entity_name | pascal_case }} {
+    fn from(model: ModelEx) -> Self {
+        Self {
+            id: model.id,
+            created_at: model.created_at,
+            last_updated: model.last_updated,
+            {% for name, property in entity.properties | items -%}
+            {%- if property.writeOnly or macros.relation_is_many_to_many(property)=='true' or macros.relation_is_one_to_many(property=property)=='true'-%}
+            {% continue -%}
+            {% elif property.type -%}
+            {{ macros.rust_var(name,false) }}: model.{{ macros.rust_var(name,false) }},
+            {% endif -%}
+            {% endfor %}
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct {{ entity_name | pascal_case }}Create {
+    {% for name, property in entity.properties | items -%}
+    {%- if property.readOnly-%}{% continue -%}{%- endif -%}
+    {%- if macros.relation_is_many_to_many(property)=='true' -%}
+    {% continue -%}
+    {% elif property.type -%}
+    pub {{ macros.rust_var(name,false) }}: {{ macros.get_rust_type(name, property, name in entity.required) }} {{ ',' if not loop.last }}
+    {% endif -%}
+    {% endfor %}
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct {{ entity_name | pascal_case }}Update {
+    {% for name, property in entity.properties | items -%}
+    {%- if property.readOnly-%}{% continue -%}{%- endif -%}
+    {%- if macros.relation_is_many_to_many(property)=='true' -%}
+    {% continue -%}
+    {% elif property.type -%}
+    pub {{ macros.rust_var(name,false) }}: {{ macros.get_rust_type(name, property, name in entity.required) }} {{ ',' if not loop.last }}
+    {% endif -%}
+    {% endfor %}
+}
+
+impl From<{{ entity_name | pascal_case }}Create> for ActiveModel {
+    fn from(params: {{ entity_name | pascal_case }}Create) -> Self {
+        ActiveModel {
+            {% for name, property in entity.properties | items -%}
+            {%- if property.readOnly or macros.relation_is_many_to_many(property)=='true' -%}{% continue -%}{%- endif -%}
+            {%- if property.type  -%}
+            {{ name | snake_case }}: Set(params.{{ name | snake_case }}.clone()),
+            {% endif -%}
+            {%- endfor -%}
+            ..Default::default()
+        }
+    }
+}
+
+impl From<{{ entity_name | pascal_case }}Update> for ActiveModel {
+    fn from(params: {{ entity_name | pascal_case }}Update) -> Self {
+        ActiveModel {
+            {% for name, property in entity.properties | items -%}
+            {%- if property.readOnly or macros.relation_is_many_to_many(property)=='true' -%}{% continue -%}{%- endif -%}
+            {%- if property.type  -%}
+            {{ name | snake_case }}: Set(params.{{ name | snake_case }}.clone()),
+            {% endif -%}
+            {%- endfor -%}
+            ..Default::default()
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct {{ entity_name | pascal_case }}Patch {
+    {% for name, property in entity.properties | items -%}
+    {%- if property.readOnly-%}{% continue -%}{%- endif -%}
+    {%- if macros.relation_is_many_to_many(property)=='true' -%}
+    {% continue -%}
+    {% elif property.type -%}
+    pub {{ macros.rust_var(name,false) }}: Option<{{ macros.get_rust_type(name, property, name in entity.required) }}> {{ ',' if not loop.last }}
+    {% endif -%}
+    {% endfor %}
+}
+
+impl {{ entity_name | pascal_case }}Patch {
+    pub fn patch_active_model(&self, active_model: &mut ActiveModel) {
+        {% for name, property in entity.properties | items -%}
+        {%- if property.readOnly or macros.relation_is_many_to_many(property)=='true' -%}{% continue -%}{%- endif -%}
+        {%- if property.type -%}
+        if let Some(value) = &self.{{ macros.rust_var(name,false) }} {
+            active_model.{{ name | snake_case }} = Set(value.clone());
+        }
+        {% endif -%}
+        {% endfor %}
+    }
+}
+
+async fn load_item<C>(
+    db: &C,
+    id: i32,
+) -> Result<Model, (StatusCode, Json<serde_json::Value>)>
 where
     C: ConnectionTrait,
 {
-    let item = Entity::find_by_id(id).one(db).await?;
-    item.ok_or_else(|| Error::NotFound)
+    Entity::find_by_id(id)
+        .one(db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))))?
+        .ok_or_else(|| (StatusCode::NOT_FOUND, Json(json!({"error": "not found"}))))
 }
 
-#[get("/api/{{ entity_name | plural | kebab_case  }}")]
-pub async fn list(Component(db): Component<DbConn>, Query(params): Query<ListParams>, pagination: Pagination,) -> Result<impl IntoResponse> {
-    let ids = params.ids.unwrap_or_default();
-
-    let mut query = {% if m2m_relationships | length > 0 -%}Entity::select_with_relations();{% else -%}Entity::find();{% endif %}
-    if !ids.is_empty() {
-        query = query.filter(Column::Id.is_in(ids));
-    }
-
-    let result = query.all(&db).await?;
-    Ok(Json(result))
-}
-
-
-#[post("/api/{{ entity_name | plural | kebab_case  }}")]
-pub async fn insert(Component(db): Component<DbConn>, Json(params): Json<Params>) -> Result<impl IntoResponse> {
-    let mut active_model = ActiveModel {
-        ..Default::default()
-    };
-    params.update(&mut active_model);
-    let item = active_model.insert(&db).await.context("failed to insert item")?;
-    {% if m2m_relationships | length > 0 -%}
-    Entity::insert_m2m().db(&db).id(item.id)
-        {% for name in m2m_relationships -%}
-        .{{name}}(params.{{name}})
-        {%- endfor %}
-        .call().await?;
-    {% endif -%}
-
-    Ok(Json(item))
-}
-
-#[put("/api/{{ entity_name | plural | kebab_case  }}/:id")]
-pub async fn update(Component(db): Component<DbConn>, Path(id): Path<Uuid>, Json(params): Json<Params> ) -> Result<impl IntoResponse> {
-    let model = load_item(&db, id).await?;
-    let mut model = model.into_active_model();
-    params.update(&mut model);
-    let model = model.update(&db).await.context("failed to update model")?;
-    {% if m2m_relationships | length > 0 -%}
-    Entity::insert_m2m()
-        .db(&db)
-        .id(model.id)
-        {% for name in m2m_relationships -%}
-        .{{name}}(params.{{name}})
-        {%- endfor %}
-        .call().await?;
-    {% endif -%}
-
-    Ok(Json(model))
-}
-
-#[delete("/api/{{ entity_name | plural | kebab_case  }}/:id")]
-pub async fn remove(Component(db): Component<DbConn>, Path(id): Path<Uuid>) -> Result<impl IntoResponse> {
-    let model = load_item(&db, id).await?;
-    model.delete(&db).await.context("failed to delete model")?;
-    Ok(Json(()))
-}
-
-#[get("/api/{{ entity_name | plural | kebab_case  }}/:id")]
-pub async fn fetch(Component(db): Component<DbConn>, Path(id): Path<Uuid>,) -> Result<impl IntoResponse> {
-    let mut model = load_item(&db, id).await?;
-    {% for name, property in entity.properties | items -%}
-        {%- if property.readOnly-%}{% continue -%}{%- endif -%}
-        {%- if macros.relation_is_many_to_many(property)=='true' -%}
-        {%- set relation = macros.get_relation(property) -%}
-        {% set m2m_relation_model = macros.get_m2m_relation_model(entity_name,property) | snake_case -%}
-    model.{{ name }} = {{'Some(' if not name in entity.required }}model.find_related(crate::models::{{ relation | snake_case }}::Entity).all(&db).await.context("fetch relation {{ relation | snake_case }}")?.iter().map(|item| item.id).collect::<Vec<Uuid>>(){{ ')' if not name in entity.required }};
+pub async fn list(state: State<AppState>) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    let models = Entity::load()
+        {% for name, property in entity.properties | items -%}
+        {%- if macros.is_relation(property)=='true' -%}
+        .with(crate::models::{{ macros.get_relation(property) | snake_case }}::Entity)
         {% endif -%}
-    {% endfor -%}
-    Ok(Json(model))
+        {% endfor -%}
+        .all(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))))?;
+    let responses: Vec<{{ entity_name | pascal_case }}> = models.into_iter().map(Into::into).collect();
+
+    Ok(Json(responses))
+}
+
+pub async fn create(state: State<AppState>, Json(create): Json<{{ entity_name | pascal_case }}Create>) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    let active_model:ActiveModel = create.into();
+    let model = active_model.insert(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"failed to insert item": e.to_string()}))))?;
+        let resp: {{ entity_name | pascal_case }} = model.into();
+        Ok(Json(resp))
+
+}
+
+pub async fn patch_one(state: State<AppState>, Path(id): Path<i32>, Json(patch): Json<{{ entity_name | pascal_case }}Patch> ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    let model = load_item(&state.db, id).await?;
+    let mut active_model = model.into_active_model();
+    patch.patch_active_model(&mut active_model);
+    let model = active_model.update(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"failed to insert item": e.to_string()}))))?;
+    let resp: {{ entity_name | pascal_case }} = model.into();
+    Ok(Json(resp))
+}
+
+pub async fn remove(state: State<AppState>, Path(id): Path<i32>) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    let model = load_item(&state.db, id).await?;
+    model.delete(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))))?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn read_one(state: State<AppState>, Path(id): Path<i32>) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    let model = Entity::load()
+        .filter_by_id(id)
+        {% for name, property in entity.properties | items -%}
+        {%- if macros.is_relation(property)=='true' -%}
+        .with(crate::models::{{ macros.get_relation(property) | snake_case }}::Entity)
+        {% endif -%}
+        {% endfor -%}
+        .one(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))))?
+        .ok_or_else(|| (StatusCode::NOT_FOUND, Json(json!({"error": "not found"}))))?;
+    let resp: {{ entity_name | pascal_case }} = model.into();
+    Ok(Json(resp))
+}
+
+pub fn routes() -> Router<AppState> {
+    Router::new()
+        .route("/{{ entity.title | plural | kebab_case  }}/", get(list))
+        .route("/{{ entity.title | plural | kebab_case  }}/", post(create))
+        .route("/{{ entity.title | plural | kebab_case  }}/{id}", get(read_one))
+        .route("/{{ entity.title | plural | kebab_case  }}/{id}", delete(remove))
+        .route("/{{ entity.title | plural | kebab_case  }}/{id}", patch(patch_one))
 }

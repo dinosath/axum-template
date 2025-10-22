@@ -11,7 +11,6 @@ FROM alpine:latest
 WORKDIR /app
 
 COPY --from=builder /app/target/release/{{project_name}}  /app/{{project_name}}
-COPY --from=builder /app/config /app/config
 {% if frontend_framework != 'none' -%}
 COPY --from=node /app/dist /app/static
 {% endif %}

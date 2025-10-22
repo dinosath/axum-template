@@ -78,7 +78,7 @@
 {%-endfilter %}
 {%- endmacro -%}
 
-{%- macro get_type(name, property, required=false) -%}
+{%- macro get_rust_type(name, property, required=false) -%}
 {% filter trim %}
     {# Improved type mapping for Rust types #}
     {%- set type = None -%}
@@ -94,7 +94,7 @@
         {%- if property.format == 'uuid' -%}
             {%- set type = 'Uuid' -%}
         {%- elif property.format == 'date-time' -%}
-            {%- set type = 'DateTime<Utc>' -%}
+            {%- set type = 'DateTime' -%}
         {%- elif property.format == 'date' -%}
             {%- set type = 'NaiveDate' -%}
         {%- elif property.format == 'time' -%}
@@ -140,12 +140,14 @@
         {%- else -%}
             {%- set type = 'f64' -%}
         {%- endif -%}
-    {%- elif property['$ref'] is defined and property['x-relationship'] is not defined -%}
-        {%- set type = name | pascal_case -%}
     {%- else -%}
         {%- set type = 'String' -%}
     {%- endif -%}
-    {%- if not required -%}
+    {%- if relation_is_many_to_one(property)=='true' or relation_is_one_to_one(property)=='true' -%}
+        {{ 'HasOne<super::'~ property['$ref'] | replace('.json', '') | snake_case ~ '::Entity>' }}
+    {%- elif relation_is_many_to_many(property)=='true' or relation_is_one_to_many(property)=='true' -%}
+        {{ 'HasMany<super::'~ property.items['$ref'] | replace('.json', '') | snake_case ~ '::Entity>' }}
+    {%- elif not required -%}
         Option<{{ type }}>
     {%- else -%}
         {{ type }}
@@ -153,17 +155,10 @@
 {% endfilter %}
 {%- endmacro -%}
 
-
-{% macro validations(name, property) -%}
-    {% if property and property['x-unique'] %}
-    #[sea_orm(unique)]
-    {%- endif -%}
-{% endmacro -%}
-
 {%- macro get_type_with_option(name, property, required_fields) -%}
 {% set required = required_fields and name and name in required_fields -%}
 {% if not required -%}Option<{% endif -%}
-{{ get_type(name,property) }}
+{{ get_rust_type(name,property) }}
 {%- if not required -%}>{% endif -%}
 {%- endmacro -%}
 
@@ -198,9 +193,13 @@
 {{ 'x-relationship' in property and property['x-relationship']=="one-to-many"}}
 {%- endmacro -%}
 
+{%- macro relation_is_one_to_one(property) -%}
+{{ 'x-relationship' in property and property['x-relationship']=="one-to-one"}}
+{%- endmacro -%}
+
 {%- macro relation_is_many_to_many(property) -%}
 {%- filter trim -%}
-{%- if 'type' in property and property.type == "array" and 'items' in property and 'x-relationship' in property and '$ref' in property.items and property['x-relationship'] == "many-to-many" -%}
+{%- if 'type' in property and property.type == "array" and 'items' in property and 'x-relationship' in property.items and '$ref' in property.items and property.items['x-relationship'] == "many-to-many" -%}
   {{ true }}
 {% else -%}
   {{ false }}
@@ -209,7 +208,7 @@
 {%- endmacro -%}
 
 {%- macro is_relation(property) -%}
-{{ relation_is_many_to_one(property)=='true' or relation_is_one_to_many(property)=='true' or relation_is_many_to_many(property)=='true'  }}
+{{ relation_is_one_to_one(property)=='true' or relation_is_many_to_one(property)=='true' or relation_is_one_to_many(property)=='true' or relation_is_many_to_many(property)=='true'  }}
 {%- endmacro -%}
 
 {%- macro get_m2m_relation(property) -%}{%- filter trim -%}
@@ -312,9 +311,9 @@
 {%- endmacro -%}
 
 {%- macro seaorm_prelude_imports(entity) -%}
-{%- set possible_imports = ['TimeDate','TimeTime'] -%}
+{%- set possible_imports = ['TimeDate','TimeTime','DateTime'] -%}
 {%- set imports = entity.properties | items | map(attribute='type') | select("in", possible_imports) -%}
-{{ "use sea_orm::prelude::{DateTimeWithTimeZone, " ~ use_imports | join(",") ~ "};"}}
+{{ "use sea_orm::prelude::{DateTime, " ~ use_imports | join(",") ~ "};"}}
 {%- endmacro -%}
 
 {% macro get_m21_relations_type(entity) -%}
@@ -347,21 +346,6 @@ true
 {{ entity_name | plural | snake_case }}
 {% endfilter -%}
 {% endmacro -%}
-
-{%- macro chrono_imports(entity) -%}
-{%- set ns = namespace(chrono_types=['DateTime', 'Utc']) -%}
-{%- for name, property in entity.properties | items -%}
-    {%- if property.type == 'string' and property.format == 'date' and 'NaiveDate' not in ns.chrono_types -%}
-        {%- set ns.chrono_types = ns.chrono_types + ['NaiveDate'] -%}
-    {%- endif -%}
-    {%- if property.type == 'string' and property.format == 'time' and 'TimeTime' not in ns.chrono_types -%}
-        {%- set ns.chrono_types = ns.chrono_types + ['TimeTime'] -%}
-    {%- endif -%}
-{%- endfor -%}
-{%- if ns.chrono_types | length > 0 -%}
-use chrono::{ {{ ns.chrono_types | join(', ') }} };
-{%- endif -%}
-{%- endmacro -%}
 
 {#-
     Macro: rust_var(name)
