@@ -1,9 +1,11 @@
 {% import "macros.jinja" as macros %}
 {% import "templates/sql_macros.jinja" as sql_macros %}
-{% set schema_name = project_name | snake_case -%}
+ {# Use the user-provided db_schema (default public) #}
+{% set schema_name = db_schema | default('public') | trim -%}
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
-CREATE SCHEMA IF NOT EXISTS {{ schema_name }};
+{# Only create schema explicitly if it's not the default 'public' #}
+{% if schema_name != 'public' %}CREATE SCHEMA IF NOT EXISTS {{ schema_name }};{% endif %}
 
 CREATE OR REPLACE FUNCTION update_last_updated_column()
 RETURNS TRIGGER AS $$

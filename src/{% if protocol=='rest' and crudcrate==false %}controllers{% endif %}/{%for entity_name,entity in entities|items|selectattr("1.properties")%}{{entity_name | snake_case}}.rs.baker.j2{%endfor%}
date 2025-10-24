@@ -215,8 +215,8 @@ pub async fn read_one(state: State<AppState>, Path(id): Path<i32>) -> Result<imp
 
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route("/{{ entity.title | plural | kebab_case  }}/", get(list))
-        .route("/{{ entity.title | plural | kebab_case  }}/", post(create))
+        .route("/{{ entity.title | plural | kebab_case  }}", get(list))
+        .route("/{{ entity.title | plural | kebab_case  }}", post(create))
         .route("/{{ entity.title | plural | kebab_case  }}/{id}", get(read_one))
         .route("/{{ entity.title | plural | kebab_case  }}/{id}", delete(remove))
         .route("/{{ entity.title | plural | kebab_case  }}/{id}", patch(patch_one))
