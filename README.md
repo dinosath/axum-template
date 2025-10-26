@@ -31,7 +31,11 @@ Below are the configurable questions exposed by `baker.yaml`:
 - `project_edition`: Rust edition (default 2021)
 - `authentication`: Select auth mechanism (`oauth2` or `none`)
 - `database`: Currently only `postgres`
-- `db_schema`: PostgreSQL schema where all generated tables will be created. Defaults to `public`. If you set a different value (e.g. `app`), the migration template will create it if it does not already exist and all tables/foreign keys will be namespaced under that schema.
+- `db_schema`: PostgreSQL schema where all generated tables will be created. Defaults to `public`.
+- `id_type`: Type used for primary keys & foreign keys. Choices:
+  - `integer` (default): `SERIAL` PK in SQL, Rust type `i32`
+  - `big_integer`: `BIGSERIAL` PK, Rust type `i64`
+  - `uuid`: `UUID DEFAULT gen_random_uuid()` PK, Rust type `Uuid`
 - `features`: Optional extra features (e.g. `open-telemetry`)
 - `protocol`: `rest` or `grpc`
 - `crudcrate`: Whether to use crudcrate-generated controllers (only asked when protocol is `rest`)
@@ -39,30 +43,48 @@ Below are the configurable questions exposed by `baker.yaml`:
 
 ## Schema Usage in Migrations
 
-The migration template (`migrations/00001_init_db.sql.baker.j2`) now uses the `db_schema` answer instead of deriving a schema name from the project name. It will:
+The migration template (`migrations/00001_init_db.sql.baker.j2`) uses `db_schema` and `id_type`:
 
-1. Always enable the `pgcrypto` extension.
-2. Conditionally create the schema if it is not `public`.
-3. Qualify all table and foreign key references with the chosen schema.
+- Creates schema only if not `public`.
+- Chooses PK column form based on `id_type`.
+- Foreign keys inherit the chosen PK base type.
 
-Example (with `db_schema = app`):
+Example with `db_schema = app` and `id_type = uuid`:
 
 ```sql
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE SCHEMA IF NOT EXISTS app;
-CREATE TABLE IF NOT EXISTS app.users (...);
+CREATE TABLE IF NOT EXISTS app.users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  last_updated TIMESTAMPTZ DEFAULT NOW()
+  -- other columns
+);
 ```
 
-If you leave it as `public`, the schema creation line is omitted but tables are still created under `public`.
+Example with `id_type = big_integer`:
+```sql
+id BIGSERIAL PRIMARY KEY
+```
+Example with `id_type = integer`:
+```sql
+id SERIAL PRIMARY KEY
+```
+
+Many‑to‑many join tables and many‑to‑one foreign keys adopt the same underlying type (`UUID`, `BIGINT`, or `INTEGER`).
+
+## Primary Key / Foreign Key Helper Macros
+
+Macros added in `macros.jinja`:
+- `pk_rust_type(id_type)` → `Uuid | i64 | i32`
+- `pk_sql_type(id_type)` → `UUID | BIGINT | INTEGER`
+- `pk_column_definition(id_type)` → Full SQL PK declaration.
+
+(If you extend model/controller templates, reuse these macros for consistency.)
 
 ## Why Are Some Structs Red in the IDE?
 
-Many files in this repository end with `.baker.j2` and contain Jinja template syntax (`{{ ... }}`, `{% ... %}`) that is not valid Rust until Baker renders them. Your IDE (e.g. RustRover) tries to parse these template files as pure Rust and highlights placeholders or partially generated structs as errors (red). This is expected and harmless.
-
-When you actually generate a project (`baker <template> <dest>`), the rendered output will be plain `.rs` files without template markers, and `cargo build` will succeed normally. So:
-
-- Red highlights in template files ≠ real compile errors.
-- Trust `cargo build` in the generated project for actual Rust correctness.
+Many files end with `.baker.j2` and contain Jinja template syntax (`{{ ... }}`, `{% ... %}`) that is not valid Rust until Baker renders them. IDE errors here are expected and harmless; the generated project after running Baker will compile with Cargo.
 
 ## Features
 - Rust backend powered by axum

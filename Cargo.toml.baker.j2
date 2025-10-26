@@ -23,7 +23,7 @@ log = { version = "0.4", default-features = false }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0", default-features = false, features = ["std"] }
 {% if database=='postgres' -%}
-sea-orm = { version = "2.0.0-rc.13", features = ["sqlx-postgres","runtime-tokio-rustls","macros","with-chrono","with-json","with-uuid"] }
+sea-orm = { version = "2.0.0-rc.15", features = ["sqlx-postgres","runtime-tokio-rustls","macros","with-chrono","with-json","with-uuid"] }
 sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "postgres", "migrate", ] }
 {% endif -%}
 utoipa = { version = "5.4", features = ["axum_extras", "uuid", "chrono"] }

@@ -44,6 +44,15 @@ questions:
     default: public
     ask_if: database == 'postgres'
 
+  id_type:
+    type: str
+    help: What type should primary keys use?
+    default: integer
+    choices:
+      - integer
+      - uuid
+      - big_integer
+
   features:
     type: str
     help: What features do you want to enable?

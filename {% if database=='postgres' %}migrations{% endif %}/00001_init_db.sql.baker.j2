@@ -1,21 +1,24 @@
 {% import "macros.jinja" as macros %}
 {% import "templates/sql_macros.jinja" as sql_macros %}
- {# Use the user-provided db_schema (default public) #}
+
+{# Use the user-provided db_schema (default public) #}
 {% set schema_name = db_schema | default('public') | trim -%}
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 {# Only create schema explicitly if it's not the default 'public' #}
-{% if schema_name != 'public' %}CREATE SCHEMA IF NOT EXISTS {{ schema_name }};{% endif %}
+{% if schema_name != 'public' %}
+CREATE SCHEMA IF NOT EXISTS {{ schema_name }};
+{% endif %}
 
 CREATE OR REPLACE FUNCTION update_last_updated_column()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW.last_updated = NOW();
+    NEW.last_updated = CURRENT_TIMESTAMP;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
-{% for entity_name,entity in entities | items | sort(attribute="1.order")-%}
+{% for entity_name, entity in entities | items | sort(attribute="1.order") -%}
 
 {% if entity.enum -%}
 DO $$
@@ -27,50 +30,53 @@ END $$;
 {% endif -%}
 
 {% if entity.properties -%}
-
 {% for prop_name, prop in entity.properties | items -%}
-    {% if prop.enum -%}
+{% if prop.enum -%}
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = '{{prop_name | lower}}') THEN
-        CREATE TYPE {{ prop_name | lower }} AS ENUM({{ "'" ~ ( prop.enum | map('string') | join("', '") ) ~ "'" }});
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = '{{ prop_name | lower }}') THEN
+        CREATE TYPE {{ prop_name | lower }} AS ENUM ({{ "'" ~ ( prop.enum | map('string') | join("', '") ) ~ "'" }});
     END IF;
 END $$;
-    {% endif -%}
+{% endif -%}
 {% endfor -%}
 
 {% set table_name = macros.get_table_name(entity_name) -%}
-CREATE TABLE IF NOT EXISTS {{ schema_name }}.{{ table_name }}(
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    last_updated TIMESTAMPTZ DEFAULT NOW()
+CREATE TABLE IF NOT EXISTS {{ schema_name }}.{{ table_name }} (
+    {{ sql_macros.pk_column_definition(id_type) }},
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     {% for name, property in entity.properties | items | rejectattr("1.items") -%}
     ,
-    {% set type = sql_macros.get_sql_type(name,property,name in entity.required) -%}
+    {% set type = sql_macros.get_sql_type(name, property, name in entity.required) -%}
     {% if property['x-relationship'] and property['x-relationship'].type == 'many-to-one' -%}
-    {{ sql_macros.add_foreign_key(name, property,schema_name) }}
+    {{ sql_macros.add_foreign_key(name, property, schema_name, id_type) }}
     {% else -%}
-    {{name | snake_case}} {{type}}
+    {{ name | snake_case }} {{ type }}
     {% endif -%}
     {% endfor -%}
 );
 
 DROP TRIGGER IF EXISTS set_last_updated ON {{ schema_name }}.{{ table_name }};
-CREATE TRIGGER set_last_updated BEFORE UPDATE ON {{ schema_name }}.{{ table_name }} FOR EACH ROW EXECUTE FUNCTION update_last_updated_column();
+CREATE TRIGGER set_last_updated
+    BEFORE UPDATE ON {{ schema_name }}.{{ table_name }}
+    FOR EACH ROW EXECUTE FUNCTION update_last_updated_column();
 
 {% endif -%}
 {% endfor -%}
 
-{% for entity_name,entity in entities | items | sort(attribute="1.order")-%}
-{% if entity.properties -%}
-{% for name, property in entity.properties | items | selectattr("1.type","eq", "array") |selectattr("1.items")|selectattr("1.items.x-relationship")|selectattr("1.items.x-relationship.type","eq", "many-to-many") -%}
-{% set table_name = macros.get_table_name(entity_name) -%}
-{% set relation_table_name = schema_name ~ '.' ~ ( [table_name, name | snake_case] | sort | join('_') ) -%}
-CREATE TABLE IF NOT EXISTS {{ relation_table_name }}(
-    id SERIAL PRIMARY KEY,
-    {{ entity_name|foreign_key }} UUID NOT NULL REFERENCES {{ schema_name }}.{{ table_name }}(id),
-    {{ property.items['x-relationship'].foreignKey }} UUID NOT NULL REFERENCES {{ schema_name }}.{{ name | plural | snake_case }}(id)
+-- m2m junction tables (composite primary keys of the two foreign keys)
+{% for relation in macros.get_m2m_relations(entities) | split(',') -%}
+{% if relation | trim == '' -%}{% continue -%}{% endif -%}
+{% set left = relation | split('_') | first -%}
+{% set right = relation | split('_') | last -%}
+{% set left_fk = left | foreign_key | trim -%}
+{% set right_fk = right | foreign_key | trim -%}
+{% set rel_name = relation | trim -%}
+CREATE TABLE IF NOT EXISTS {{ rel_name }} (
+    {{ left_fk }} {{ sql_macros.foreign_key_column_type(id_type) }} NOT NULL REFERENCES {{ schema_name }}.{{ macros.get_table_name(left) }}(id) ON DELETE CASCADE,
+    {{ right_fk }} {{ sql_macros.foreign_key_column_type(id_type) }} NOT NULL REFERENCES {{ schema_name }}.{{ macros.get_table_name(right) }}(id) ON DELETE CASCADE,
+    PRIMARY KEY ({{ left_fk }}, {{ right_fk }})
 );
-{% endfor -%}
-{% endif -%}
+CREATE INDEX IF NOT EXISTS idx_{{- rel_name -}}_{{- right_fk -}}_{{- left_fk }} ON {{ rel_name -}} ({{- right_fk -}}, {{- left_fk -}});
 {% endfor -%}

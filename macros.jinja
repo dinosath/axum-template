@@ -343,7 +343,7 @@ true
 
 {% macro get_table_name(entity_name) -%}
 {% filter trim -%}
-{{ entity_name | plural | snake_case }}
+{{ entity_name | snake_case }}
 {% endfilter -%}
 {% endmacro -%}
 
@@ -450,4 +450,22 @@ true
     {%- endif -%}
 
     {{- var -}}
+{%- endmacro %}
+
+{% macro pk_rust_type(id_type) -%}
+{% if id_type == 'uuid' -%}
+Uuid
+{% elif id_type == 'big_integer' -%}
+i64
+{% else -%}
+i32
+{% endif -%}
+{%- endmacro %}
+
+{% macro pk_sql_type(id_type) -%}
+{% if id_type == 'uuid' -%}UUID{% elif id_type == 'big_integer' -%}BIGINT{% else -%}INTEGER{% endif -%}
+{%- endmacro %}
+
+{% macro pk_column_definition(id_type) -%}
+{% if id_type == 'uuid' -%}id UUID PRIMARY KEY DEFAULT gen_random_uuid(){% elif id_type == 'big_integer' -%}id BIGSERIAL PRIMARY KEY{% else -%}id SERIAL PRIMARY KEY{% endif -%}
 {%- endmacro %}

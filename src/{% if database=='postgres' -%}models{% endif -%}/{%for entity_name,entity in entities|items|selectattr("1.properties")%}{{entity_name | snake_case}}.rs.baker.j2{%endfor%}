@@ -18,10 +18,10 @@ enum {{ name | pascal_case }}{
 
 #[sea_orm::model]
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
-#[sea_orm(table_name = "{{ table_name }}")]
+#[sea_orm(table_name = "{{ file_name }}")]
 pub struct Model {
     #[sea_orm(primary_key)]
-    pub id: i32,
+    pub id: {{ macros.pk_rust_type(id_type) }},
     pub created_at: DateTime,
     pub last_updated: DateTime,
     {% for name, property in entity.properties | items -%}
@@ -29,12 +29,12 @@ pub struct Model {
     #[sea_orm(unique)]
     {% endif -%}
     {% if macros.relation_is_many_to_many(property)=='true' -%}
-    #[sea_orm(has_many/*, via = "{{ macros.get_m2m_relation_model(entity_name,property) | snake_case }}" */)]
+    #[sea_orm(has_many, via = "{{ macros.get_m2m_relation_model(entity_name,property) | snake_case }}" )]
     {% elif macros.relation_is_one_to_many(property)=='true' -%}
     #[sea_orm(has_many)]
     {% elif macros.relation_is_many_to_one(property)=='true' -%}
     #[sea_orm(unique)]
-    pub {{name}}_id: i32,
+    pub {{name}}_id: {{ macros.pk_rust_type(id_type) }},
     #[sea_orm(belongs_to, from = "{{name}}_id", to = "id")]
     {% endif -%}
     pub {{ macros.rust_var(name,false) }}: {{ macros.get_rust_type(name, property, name in entity.required) }}

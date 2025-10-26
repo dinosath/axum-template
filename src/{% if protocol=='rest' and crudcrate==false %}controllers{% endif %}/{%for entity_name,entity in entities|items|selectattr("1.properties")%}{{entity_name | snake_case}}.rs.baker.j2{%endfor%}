@@ -1,6 +1,5 @@
 {% import "macros.jinja" as macros -%}
 {% set file_name = entity_name | snake_case -%}
-{% set table_name = macros.get_table_name(entity_name) -%}
 {% set module_name = file_name | pascal_case -%}
 {% set model = entity_name | plural | pascal_case -%}
 use serde_json::json;
@@ -15,13 +14,13 @@ use crate::models::{{ file_name }}::{ActiveModel, Entity, Model, ModelEx};
 
 #[derive(Clone, Debug, Serialize)]
 pub struct {{ entity_name | pascal_case }} {
-    pub id: i32,
+    pub id: {{ macros.pk_rust_type(id_type) | trim}},
     pub created_at: DateTime,
     pub last_updated: DateTime,
     {% for name, property in entity.properties | items -%}
     {%- if property.writeOnly -%}{% continue -%}{%- endif -%}
     {%- if macros.relation_is_many_to_many(property)=='true' or macros.relation_is_one_to_many(property=property)=='true'-%}
-    {% continue -%}
+    pub {{ macros.rust_var(name,false) }}: Option<Vec<crate::controllers::{{ macros.get_relation(property) | snake_case }}::{{ macros.get_relation(property) | pascal_case }}>> {{ ',' if not loop.last }}
     {% elif property.type -%}
     pub {{ macros.rust_var(name,false) }}: {{ macros.get_rust_type(name, property, name in entity.required) }} {{ ',' if not loop.last }}
     {% endif -%}
@@ -35,10 +34,11 @@ impl From<Model> for {{ entity_name | pascal_case }} {
             created_at: model.created_at,
             last_updated: model.last_updated,
             {% for name, property in entity.properties | items -%}
+            {% set var_name = macros.rust_var(name,false) -%}
             {%- if property.writeOnly or macros.relation_is_many_to_many(property)=='true' or macros.relation_is_one_to_many(property=property)=='true'-%}
-            {% continue -%}
+            {{ var_name }}: None,
             {% elif property.type -%}
-            {{ macros.rust_var(name,false) }}: model.{{ macros.rust_var(name,false) }},
+            {{ var_name }}: model.{{ var_name }},
             {% endif -%}
             {% endfor %}
         }
@@ -52,10 +52,11 @@ impl From<ModelEx> for {{ entity_name | pascal_case }} {
             created_at: model.created_at,
             last_updated: model.last_updated,
             {% for name, property in entity.properties | items -%}
+            {% set var_name = macros.rust_var(name,false) -%}
             {%- if property.writeOnly or macros.relation_is_many_to_many(property)=='true' or macros.relation_is_one_to_many(property=property)=='true'-%}
-            {% continue -%}
+            {{ var_name }}: if model.{{ var_name }}.is_empty() { None } else { Some(model.{{ var_name }}.into_iter().map(crate::controllers::{{ macros.get_relation(property) | snake_case }}::{{ macros.get_relation(property) | pascal_case }}::from).collect()) },
             {% elif property.type -%}
-            {{ macros.rust_var(name,false) }}: model.{{ macros.rust_var(name,false) }},
+            {{ var_name }}: model.{{ var_name }},
             {% endif -%}
             {% endfor %}
         }
