@@ -45,8 +45,7 @@ Below are the configurable questions exposed by `baker.yaml`:
 - `project_name`: Name of your application (used for crate name and other identifiers)
 - `project_author`: Author metadata
 - `project_version`: Initial version
-- `project_edition`: Rust edition (default 2021)
-- `authentication`: Select auth mechanism (`oauth2` or `none`)
+- `authentication`: Select auth mechanism (`oidc` or `none`)
 - `database`: Currently only `postgres`
 - `db_schema`: PostgreSQL schema where all generated tables will be created. Defaults to `public`.
 - `id_type`: Type used for primary keys & foreign keys. Choices:
@@ -64,7 +63,6 @@ The `entities` configuration accepts a JSON object defining your domain model. F
 - Database models (using sea-orm)
 - SQL migrations
 - CRUD controllers (if `protocol = rest` and `crudcrate = false`)
-- OpenAPI documentation annotations
 
 ### Entity Schema Structure
 
@@ -261,7 +259,6 @@ This will generate:
   - `POST /api/posts`, `GET /api/posts`, `GET /api/posts/{id}`, `PUT /api/posts/{id}`, `DELETE /api/posts/{id}`
   - `POST /api/tags`, `GET /api/tags`, `GET /api/tags/{id}`, `PUT /api/tags/{id}`, `DELETE /api/tags/{id}`
 - **Migrations**: SQL scripts with proper foreign key constraints
-- **OpenAPI documentation**: Auto-generated API docs with schemas
 
 ## Schema Usage in Migrations
 
