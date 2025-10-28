@@ -1,15 +1,24 @@
-FROM rust:alpine as builder
-
+ARG TARGETARCH=amd64
+FROM --platform=$BUILDPLATFORM docker.io/allheil/rust-musl-cross:$TARGETARCH AS builder-base
 WORKDIR /app
-RUN USER=root
 
-RUN apk add --no-cache pkgconfig build-base musl-dev libressl-dev
-COPY ./ ./
+RUN env -u CARGO_BUILD_TARGET cargo install --locked cargo-chef
+
+FROM builder-base AS builder-prepare
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM builder-base AS builder
+COPY --from=builder-prepare /app/recipe.json recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json
+COPY . .
+
+
 RUN cargo build --release
 
-FROM alpine:latest
-WORKDIR /app
+FROM  --platform=$TARGETPLATFORM gcr.io/distroless/static-debian12
+COPY --from=builder /app/target/*/release/{{project_name}} /
 
-COPY --from=builder /app/target/release/{{project_name}}  /app/{{project_name}}
-ENTRYPOINT ["/app/{{project_name}}"]
-CMD ["start"]
+EXPOSE 8080
+
+ENTRYPOINT ["/{{project_name}}"]

@@ -4,8 +4,8 @@ This is a [baker](https://github.com/aliev/baker) template for quickly scaffoldi
 
 ## What does this template do?
 
-- **Simple project:** If you just want a basic project structure, you can generate a minimal backend (with or without a frontend) using springrs.
-- **Full CRUD application:** If you define your entities in the baker prompts, this template will generate a complete CRUD backend with sea-orm models, controllers created by [crudcrate](https://github.com/evanjt/crudcrate), migrations and a matching frontend for managing your data.
+- **Simple project:** If you just want a basic project structure, you can generate a minimal backend using axum.
+- **Full CRUD application:** If you define your entities in the baker prompts, this template will generate a complete CRUD backend with sea-orm models, controllers, and migrations.
 
 ## Getting Started
 
