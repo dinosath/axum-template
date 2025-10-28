@@ -311,7 +311,8 @@ The template includes a `Dockerfile` optimized for multi-architecture builds usi
 - **Fast builds**: `cargo-chef` caches dependencies separately from source code
 - **Reproducible builds**: `--locked` flag ensures consistent dependency versions
 - **Optimized images**: Multi-stage build with minimal runtime image
-- **Small image size**: Final image is approximately 7.35 MB
+- **Compression**: Binary is stripped and uses LTO (Link-Time Optimization) for maximum compression
+- **Small image size**: Final multiarch image is approximately 5 MB
 
 ### Building Locally
 
@@ -337,7 +338,9 @@ Many files end with `.baker.j2` and contain Jinja template syntax (`{{ ... }}`, 
 ## Features
 - Rust backend powered by axum
 - Database support for postgres via sea-orm
-- Docker and docker-compose support
+- Docker multi-architecture support (amd64, arm64) with cargo-chef
+- Compressed, optimized images (~5 MB) using LTO and binary stripping
+- OpenAPI documentation with interactive UI (utoipa + Scalar)
 - Flexible code generation via baker
 - Generate either a minimal project or a full CRUD app based on your entity definitions
 
