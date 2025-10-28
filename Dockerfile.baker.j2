@@ -1,23 +1,36 @@
-ARG TARGETARCH=amd64
-FROM --platform=$BUILDPLATFORM docker.io/allheil/rust-musl-cross:$TARGETARCH AS builder-base
+FROM lukemathwalker/cargo-chef:latest-rust-1-alpine3.21 AS chef
 WORKDIR /app
+RUN apk add --no-cache upx
 
-RUN env -u CARGO_BUILD_TARGET cargo install --locked cargo-chef
-
-FROM builder-base AS builder-prepare
+FROM chef AS planner
 COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
 
-FROM builder-base AS builder
-COPY --from=builder-prepare /app/recipe.json recipe.json
+FROM chef AS builder
+COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
 
-
 RUN cargo build --release
+RUN upx --best --lzma /app/target/release/{{project_name}}
 
-FROM  --platform=$TARGETPLATFORM gcr.io/distroless/static-debian12
-COPY --from=builder /app/target/*/release/{{project_name}} /
+{% if frontend_framework != 'none' -%}
+FROM node:20-slim AS node
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable
+COPY ./frontend /app
+ENV CI=true
+WORKDIR /app
+RUN pnpm install
+RUN pnpm build
+{% endif %}
+
+FROM gcr.io/distroless/static-debian12
+COPY --from=builder /app/target/release/{{project_name}} /
+{% if frontend_framework != 'none' -%}
+COPY --from=node /app/dist /app/static
+{% endif %}
 
 EXPOSE 8080
 

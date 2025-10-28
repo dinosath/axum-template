@@ -21,6 +21,9 @@ pub async fn init_db() -> Result<DatabaseConnection, Box<dyn std::error::Error>>
 
 pub async fn run() -> Result<(), Box<dyn Error>> {
     dotenvy::dotenv().ok();
+    if env::var("RUST_LOG").is_err() {
+        env::set_var("RUST_LOG", "info");
+    }
     env_logger::init();
 
     {% if database=='postgres'-%}
