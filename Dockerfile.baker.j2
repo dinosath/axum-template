@@ -11,8 +11,5 @@ FROM alpine:latest
 WORKDIR /app
 
 COPY --from=builder /app/target/release/{{project_name}}  /app/{{project_name}}
-{% if frontend_framework != 'none' -%}
-COPY --from=node /app/dist /app/static
-{% endif %}
 ENTRYPOINT ["/app/{{project_name}}"]
 CMD ["start"]

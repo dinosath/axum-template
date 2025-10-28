@@ -1,0 +1,46 @@
+use axum_oidc::{EmptyAdditionalClaims, OidcAuthLayer, OidcLoginLayer, error::MiddlewareError};
+use std::env;
+use axum::{error_handling::HandleErrorLayer, http::Uri, response::IntoResponse, Router};
+use tower::ServiceBuilder;
+use tower_sessions::{cookie::{time::Duration, SameSite},Expiry, MemoryStore, SessionManagerLayer};
+use crate::app_state::AppState;
+
+pub async fn build_oidc(router:Router<AppState>) -> Router<AppState> {
+    let app_url = env::var("APP_URL").expect("APP_URL env variable");
+    let issuer = env::var("ISSUER").expect("ISSUER env variable");
+    let client_id = env::var("CLIENT_ID").expect("CLIENT_ID env variable");
+    let client_secret = env::var("CLIENT_SECRET").ok();
+
+    let session_store = MemoryStore::default();
+    let session_layer = SessionManagerLayer::new(session_store)
+        .with_secure(false)
+        .with_same_site(SameSite::Lax)
+        .with_expiry(Expiry::OnInactivity(Duration::seconds(120)));
+
+    let oidc_login_service = ServiceBuilder::new()
+        .layer(HandleErrorLayer::new(|e: MiddlewareError| async {
+            e.into_response()
+        }))
+        .layer(OidcLoginLayer::<EmptyAdditionalClaims>::new());
+
+    let oidc_auth_service = ServiceBuilder::new()
+        .layer(HandleErrorLayer::new(|e: MiddlewareError| async {
+            e.into_response()
+        }))
+        .layer(
+            OidcAuthLayer::<EmptyAdditionalClaims>::discover_client(
+                Uri::from_maybe_shared(app_url).expect("valid APP_URL"),
+                issuer,
+                client_id,
+                client_secret,
+                vec![],
+            )
+            .await
+            .unwrap(),
+        );
+
+    router
+        .layer(oidc_login_service)
+        .layer(oidc_auth_service)
+        .layer(session_layer)
+}

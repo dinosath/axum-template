@@ -26,9 +26,9 @@ questions:
   authentication:
     type: str
     help: What authentication method do you want to use?
-    default: oauth2
+    default: oidc
     choices:
-      - oauth2
+      - oidc
       - none
 
   database:

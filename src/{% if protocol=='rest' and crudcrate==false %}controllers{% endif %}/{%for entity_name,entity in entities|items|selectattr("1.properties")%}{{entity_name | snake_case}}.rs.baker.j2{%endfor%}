@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 use sea_orm::{ActiveModelTrait, ModelTrait, EntityTrait, Set, IntoActiveModel, ConnectionTrait};
 use sea_orm::EntityLoaderTrait;
 use sea_orm::prelude::*;
-{{ macros.seaorm_prelude_imports(entity) | trim }}
 use crate::app_state::AppState;
 use crate::models::{{ file_name }}::{ActiveModel, Entity, Model, ModelEx};
 

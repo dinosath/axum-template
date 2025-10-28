@@ -1,0 +1,42 @@
+use log::{info, error};
+{% if database=='postgres' -%}
+use sea_orm::{Database, DatabaseConnection};
+use sqlx::postgres::PgPoolOptions;
+{% endif -%}
+use std::{env, error::Error};
+use tokio::net::TcpListener;
+use crate::app_state::AppState;
+
+{% if database=='postgres'-%}
+pub async fn init_db() -> Result<DatabaseConnection, Box<dyn std::error::Error>> {
+    let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432".to_string());
+    let db: DatabaseConnection = Database::connect(&database_url).await?;
+    info!("🔄 Running database migrations...");
+    let pool = PgPoolOptions::new().max_connections(5).connect(&database_url).await?;
+    if let Err(e) = sqlx::migrate!("./migrations").run(&pool).await { error!("❌ Failed migrations: {e}"); return Err(e.into()); }
+    info!("✅ Database migrations completed successfully!");
+    Ok(db)
+}
+{% endif -%}
+
+pub async fn run() -> Result<(), Box<dyn Error>> {
+    dotenvy::dotenv().ok();
+    env_logger::init();
+
+    {% if database=='postgres'-%}
+    let db= init_db().await?;
+    {% endif -%}
+
+    let port_env = env::var("PORT").unwrap_or_else(|_| "8080".to_string());
+    let requested_port: u16 = port_env.parse().unwrap_or(8080);
+
+    let listener = TcpListener::bind(format!("[::]:{}", requested_port)).await?;
+    let actual_port = listener.local_addr()?.port();
+    info!("Server starting on port {}", actual_port);
+
+    let state = AppState {  {{ 'db' if database=='postgres' -}} };
+    let app = crate::controllers::routes("/api",state);
+    {{ 'let app = crate::services::oidc::build_oidc(app).await;' if protocol=='rest' and authentication=='oidc' }}
+    axum::serve(listener, app).await?;
+    Ok(())
+}

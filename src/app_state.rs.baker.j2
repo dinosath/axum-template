@@ -1,0 +1,6 @@
+{{ 'use sea_orm::DatabaseConnection;' if database=='postgres' }}
+
+#[derive(Clone)]
+pub struct AppState {
+    {{ 'pub db: DatabaseConnection,' if database=='postgres' }}
+}
