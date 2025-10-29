@@ -14,7 +14,7 @@ COPY . .
 RUN cargo build --release
 RUN upx --best --lzma /app/target/release/{{project_name}}
 
-{% if frontend_framework != 'none' -%}
+{% if serve_static_content == 'true' -%}
 FROM node:20-slim AS node
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
