@@ -7,8 +7,12 @@ use std::{env, error::Error};
 use tokio::net::TcpListener;
 use crate::app_state::AppState;
 {% if static_includes | length > 0 -%}
-use static_serve::embed_asset;
-{% endif -%}
+use static_serve::embed_assets;
+
+{% for entry in static_includes -%}
+embed_assets!("{{ entry.assets_dir }}", compress = true);
+{% endfor -%}
+{%- endif %}
 
 {% if database=='postgres'-%}
 pub async fn init_db() -> Result<DatabaseConnection, Box<dyn std::error::Error>> {
@@ -41,9 +45,7 @@ pub async fn run() -> Result<(), Box<dyn Error>> {
     let app = crate::controllers::routes("/api",state);
     {{ 'let app = crate::services::oidc::build_oidc(app).await;' if protocol=='rest' and authentication=='oidc' }}
     {% if static_includes | length > 0 -%}
-    {% for entry in static_includes -%}
-    let app = app.route("{{ entry.route }}", embed_asset!("{{ entry.assets_dir }}", compress = true, cache_bust = true));
-    {% endfor -%}
+    let app = app.merge(static_router());
     {% endif -%}
     axum::serve(listener, app).await?;
     Ok(())

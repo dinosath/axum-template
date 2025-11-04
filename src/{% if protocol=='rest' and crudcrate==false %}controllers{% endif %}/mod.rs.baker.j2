@@ -1,5 +1,8 @@
+{% import "templates/macros.jinja" as macros -%}
+{% import "templates/rust/types.jinja" as rust_types %}
+
 {% for entity_name,entity in entities | items | selectattr("1.properties")-%}
-pub mod {{ entity_name | snake_case }};
+pub mod {{ rust_types.identifier(entity_name) }};
 {% endfor -%}
 
 use axum::Router;
@@ -9,7 +12,7 @@ use crate::app_state::AppState;
 pub fn routes(prefix:&str, state:AppState) -> Router {
     let router = Router::new()
         {% for entity_name,entity in entities | items -%}
-        .merge({{entity_name | snake_case}}::routes())
+        .merge({{rust_types.identifier(entity_name)}}::routes())
         {% endfor -%};
     Router::new()
         .nest(prefix, router)

@@ -13,9 +13,9 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub {{ right | snake_case }}_id: i32,
     #[sea_orm(belongs_to, from = "{{ left | snake_case }}_id", to = "id")]
-    pub {{ left | snake_case }}: Option<super::{{ left | snake_case }}::Entity>,
+    pub {{ left | snake_case }}: Option<super::{{ macros.identifier(left) }}::Entity>,
     #[sea_orm(belongs_to, from = "{{ right | snake_case }}_id", to = "id")]
-    pub {{ right | snake_case }}: Option<super::{{ right | snake_case }}::Entity>,
+    pub {{ right | snake_case }}: Option<super::{{ macros.identifier(right) }}::Entity>,
 }
 
 impl ActiveModelBehavior for ActiveModel {}

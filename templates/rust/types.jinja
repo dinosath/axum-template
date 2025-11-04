@@ -1,0 +1,232 @@
+{% import "templates/macros.jinja" as macros %}
+
+{%- macro get_rust_primitive(property) -%}
+{% filter trim %}
+{%- if property.type -%}
+    {%- if property.type == 'string' -%}
+        {%- if property.format == 'uuid' -%}
+            Uuid
+        {%- elif property.format == 'date-time' -%}
+            DateTime
+        {%- elif property.format == 'date' -%}
+            NaiveDate
+        {%- elif property.format == 'time' -%}
+            TimeTime
+        {%- elif property.format in ['email', 'url'] -%}
+            String
+        {%- else -%}
+            String
+        {%- endif -%}
+    {%- elif property.type == 'boolean' -%}
+        bool
+    {%- elif property.type == 'integer' -%}
+        {%- if property.minimum and property.minimum >= 0 -%}
+            {%- if property.maximum and property.maximum <= 255 -%}
+                i8
+            {%- elif max is not none and max <= 65535 -%}
+                i16
+            {%- elif max is not none and max <= 4294967295 -%}
+                i32
+            {%- elif max is not none and max <= 9223372036854775807 -%}
+                i64
+            {%- else -%}
+                i32
+            {%- endif -%}
+        {%- else -%}
+            {%- if max is not none and max <= 127 -%}
+                i8
+            {%- elif max is not none and max <= 32767 -%}
+                i16
+            {%- elif max is not none and max <= 2147483647 -%}
+                i32
+            {%- else -%}
+                i64
+            {%- endif -%}
+        {%- endif -%}
+    {%- elif property.type == 'number' -%}
+        {%- set min = property.minimum if property.minimum is defined else property.exclusiveMinimum if property.exclusiveMinimum is defined else None -%}
+        {%- set max = property.maximum if property.maximum is defined else property.exclusiveMaximum if property.exclusiveMaximum is defined else None -%}
+        {%- if min is not none and min >= -3.40282347 and max is not none and max <= 3.40282347 -%}
+            f32
+        {%- else -%}
+            f64
+        {%- endif -%}
+    {%- else -%}
+        String
+    {%- endif -%}
+{%- endif -%}
+{% endfilter %}
+{%- endmacro -%}
+
+{%- macro get_rust_type(name, property, required=false) -%}
+{% filter trim %}
+    {%- set type = None -%}
+    {%- if property.enum is defined and property.enum|length > 0 -%}
+        {%- set type = name | pascal_case -%}
+    {%- elif property.type and property.type!='array' -%}
+        {%- set type = get_rust_primitive(property) -%}
+    {%- endif -%}
+    {%- if macros.relation_is_many_to_one(property)=='true' or macros.relation_is_one_to_one(property)=='true' -%}
+        {{ 'HasOne<super::'~ identifier(property['$ref'] | replace('.json', '')) ~ '::Entity>' }}
+    {%- elif macros.relation_is_many_to_many(property)=='true' or macros.relation_is_one_to_many(property)=='true' -%}
+        {{ 'HasMany<super::'~ identifier(property.items['$ref'] | replace('.json', '')) ~ '::Entity>' }}
+    {%- elif not required -%}
+        Option<{{ type }}>
+    {%- else -%}
+        {{ type }}
+    {%- endif -%}
+{% endfilter %}
+{%- endmacro -%}
+
+{%- macro get_type_with_option(name, property, required_fields) -%}
+{% set required = required_fields and name and name in required_fields -%}
+{% if not required -%}Option<{% endif -%}
+{{ get_rust_type(name,property) }}
+{%- if not required -%}>{% endif -%}
+{%- endmacro -%}
+
+{%- macro enum_imports(entity) -%}
+{%- for name,property in entity.properties | items -%}
+    {%- if property['$ref'] and not property['x-relationship'] -%}
+        {{ "use crate::models::enums::" ~ identifier(name) ~ "::{" ~ identifier(name) ~ "};" }}
+    {%- endif -%}
+{%- endfor -%}
+{%- endmacro -%}
+
+{%- macro seaorm_prelude_imports(entity) -%}
+{%- set possible_imports = ['TimeDate','TimeTime','DateTime'] -%}
+{%- set imports = entity.properties | items | map(attribute='type') | select("in", possible_imports) -%}
+{{ "use sea_orm::prelude::{DateTime, " ~ use_imports | join(",") ~ "};"}}
+{%- endmacro -%}
+
+
+{#-
+    Macro: rust_var(name)
+
+    Purpose:
+        Transforms an arbitrary string into a valid Rust variable name.
+
+    Rules applied:
+        1. Converts the string to lowercase.
+        2. Replaces spaces and most punctuation with underscores ("_").
+        3. Collapses consecutive underscores into a single underscore.
+        4. Trims leading and trailing underscores.
+        5. If the result is empty, it becomes "_".
+        6. If the name starts with a digit, prefixes an underscore ("_").
+        7. If the name is a reserved Rust keyword, prefixes an underscore ("_").
+
+    Rust keywords handled:
+        as, break, const, continue, crate, else, enum, extern, false, fn, for, if,
+        impl, in, let, loop, match, mod, move, mut, pub, ref, return, self, Self,
+        static, struct, super, trait, true, type, unsafe, use, where, while,
+        async, await, dyn
+
+    Examples:
+        {{ rust_var("9:16") }}        → "_9_16"
+        {{ rust_var("fn") }}          → "_fn"
+        {{ rust_var("let") }}         → "_let"
+        {{ rust_var("Hello.World") }} → "hello_world"
+        {{ rust_var("Rust@2025!") }}  → "rust_2025_"
+-#}
+{% macro rust_var(name,enum=false) -%}
+    {%- set var = name|string-%}
+
+    {# Replace common non-identifier chars with "_" #}
+    {%- set var = var
+        | replace(" ", "_")
+        | replace("-", "_")
+        | replace(":", "_")
+        | replace("/", "_")
+        | replace("\\", "_")
+        | replace(".", "_")
+        | replace(",", "_")
+        | replace(";", "_")
+        | replace("+", "_")
+        | replace("*", "_")
+        | replace("@", "_")
+        | replace("#", "_")
+        | replace("$", "_")
+        | replace("%", "_")
+        | replace("^", "_")
+        | replace("&", "_")
+        | replace("(", "_")
+        | replace(")", "_")
+        | replace("[", "_")
+        | replace("]", "_")
+        | replace("{", "_")
+        | replace("}", "_")
+        | replace("|", "_")
+        | replace("?", "_")
+        | replace("!", "_")
+        | replace("'", "_")
+        | replace('"', "_")
+        | replace("<", "_")
+        | replace(">", "_")
+        | replace("~", "_")
+        | replace("`", "_")
+    -%}
+
+    {%- if enum -%}
+        {%- set var = var | pascal_case -%}
+    {%- else -%}
+        {%- set var = var | snake_case -%}
+    {%- endif -%}
+
+    {# Collapse multiple underscores #}
+    {%- for _ in range(6) -%}
+        {%- set var = var | replace("__", "_") -%}
+    {%- endfor -%}
+
+    {# Trim leading/trailing "_" #}
+    {%- set var = var | trim("_") -%}
+
+    {# Fallback if empty #}
+    {%- if var == "" -%}
+        {%- set var = "_" -%}
+    {%- endif -%}
+
+    {# If first char is a digit, prefix "_" #}
+    {%- if var and (var[0] in "0123456789") -%}
+        {%- set var = "_" ~ var -%}
+    {%- endif -%}
+
+    {# Reserved Rust keywords #}
+    {%- set keywords = [
+        "as","break","const","continue","crate","else","enum","extern","false","fn",
+        "for","if","impl","in","let","loop","match","mod","move","mut","pub","ref",
+        "return","self","self","static","struct","super","trait","true","type",
+        "unsafe","use","where","while","async","await","dyn"
+    ] -%}
+
+    {%- if var in keywords -%}
+        {%- set var = "r#" ~ var -%}
+    {%- endif -%}
+
+    {{- var -}}
+{%- endmacro %}
+
+{% macro identifier(name) %}
+{%- filter trim -%}
+{{rust_var(name | snake_case,false)}}
+{%- endfilter -%}
+{% endmacro -%}
+
+{% macro pk_rust_type(id_type) -%}
+{%- filter trim -%}
+{% if id_type == 'uuid' -%}
+Uuid
+{% elif id_type == 'big_integer' -%}
+i64
+{% else -%}
+i32
+{% endif -%}
+{%- endfilter -%}
+{%- endmacro %}
+
+{% macro pk_sql_type(id_type) -%}
+{% if id_type == 'uuid' -%}UUID{% elif id_type == 'big_integer' -%}BIGINT{% else -%}INTEGER{% endif -%}
+{%- endmacro %}
+
+{% macro pk_column_definition(id_type) -%}
+{% if id_type == 'uuid' -%}id UUID PRIMARY KEY DEFAULT gen_random_uuid(){% elif id_type == 'big_integer' -%}id BIGSERIAL PRIMARY KEY{% else -%}id SERIAL PRIMARY KEY{% endif -%}
+{%- endmacro %}

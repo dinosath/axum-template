@@ -1,17 +1,19 @@
-{% import "macros.jinja" as macros %}
+{% import "templates/macros.jinja" as macros %}
+{% import "templates/rust/types.jinja" as rust_types %}
 {% set file_name = entity_name | snake_case -%}
 {% set table_name = entity_name | table_case -%}
 {% set module_name = file_name | pascal_case -%}
 use sea_orm::entity::prelude::*;
 {% set m2m_relationships = entity.properties | items | selectattr('1.x-relationship', 'equalto', 'many-to-many') | map(attribute='0') -%}
+{{ 'use serde::{Deserialize, Serialize};' if entity.properties | items | selectattr('1.enum') | length > 0 }}
 
 {% for name,property in entity.properties | items | selectattr('1.enum') -%}
-#[derive(PartialEq, Clone, Debug, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize, ToSchema)]
+#[derive(PartialEq, Clone, Debug, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
 #[sea_orm(rs_type = "String", db_type = "String(StringLen::None)", enum_name = "{{ name | snake_case }}")]
-enum {{ name | pascal_case }}{
+pub enum {{ name | pascal_case }}{
         {% for enum in property.enum -%}
         #[sea_orm(string_value = "{{ enum | snake_case }}")]
-        {{ macros.rust_var(enum,true) }}{%- if not loop.last -%},{% endif -%}
+        {{ rust_types.rust_var(enum,true) }}{%- if not loop.last -%},{% endif -%}
         {% endfor %}
 }
 {% endfor -%}
@@ -21,7 +23,7 @@ enum {{ name | pascal_case }}{
 #[sea_orm(table_name = "{{ file_name }}")]
 pub struct Model {
     #[sea_orm(primary_key)]
-    pub id: {{ macros.pk_rust_type(id_type) }},
+    pub id: {{ rust_types.pk_rust_type(id_type) }},
     pub created_at: DateTime,
     pub last_updated: DateTime,
     {% for name, property in entity.properties | items -%}
@@ -34,10 +36,10 @@ pub struct Model {
     #[sea_orm(has_many)]
     {% elif macros.relation_is_many_to_one(property)=='true' -%}
     #[sea_orm(unique)]
-    pub {{name}}_id: {{ macros.pk_rust_type(id_type) }},
+    pub {{name}}_id: {{ rust_types.pk_rust_type(id_type) }},
     #[sea_orm(belongs_to, from = "{{name}}_id", to = "id")]
     {% endif -%}
-    pub {{ macros.rust_var(name,false) }}: {{ macros.get_rust_type(name, property, name in entity.required) }}
+    pub {{ rust_types.rust_var(name,false) }}: {{ rust_types.get_rust_type(name, property, name in entity.required) }}
     {%- if not loop.last -%},{% endif %}
     {% endfor %}
 }

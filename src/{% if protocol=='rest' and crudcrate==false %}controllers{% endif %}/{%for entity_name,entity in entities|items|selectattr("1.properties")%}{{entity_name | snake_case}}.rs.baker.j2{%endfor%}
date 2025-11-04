@@ -1,6 +1,5 @@
-{% import "macros.jinja" as macros -%}
-{% set file_name = entity_name | snake_case -%}
-{% set module_name = file_name | pascal_case -%}
+{% import "templates/macros.jinja" as macros -%}
+{% import "templates/rust/types.jinja" as rust_types -%}
 {% set model = entity_name | plural | pascal_case -%}
 use serde_json::json;
 use axum::{Router, extract::{Path, State}, http::StatusCode, routing::{delete, get, patch, post, put}, response::IntoResponse, Json};
@@ -9,7 +8,7 @@ use sea_orm::{ActiveModelTrait, ModelTrait, EntityTrait, Set, IntoActiveModel, C
 use sea_orm::EntityLoaderTrait;
 use sea_orm::prelude::*;
 use crate::app_state::AppState;
-use crate::models::{{ file_name }}::{ActiveModel, Entity, Model, ModelEx};
+use crate::models::{{ macros.identifier(entity_name) }}::{ActiveModel, Entity, Model, ModelEx, {% for name,property in entity.properties | items | selectattr('1.enum') -%}{{ macros.identifier(name) | pascal_case }}{% endfor -%}};
 
 #[derive(Clone, Debug, Serialize)]
 pub struct {{ entity_name | pascal_case }} {
@@ -19,9 +18,9 @@ pub struct {{ entity_name | pascal_case }} {
     {% for name, property in entity.properties | items -%}
     {%- if property.writeOnly -%}{% continue -%}{%- endif -%}
     {%- if macros.relation_is_many_to_many(property)=='true' or macros.relation_is_one_to_many(property=property)=='true'-%}
-    pub {{ macros.rust_var(name,false) }}: Option<Vec<crate::controllers::{{ macros.get_relation(property) | snake_case }}::{{ macros.get_relation(property) | pascal_case }}>> {{ ',' if not loop.last }}
+    pub {{ rust_types.rust_var(name,false) }}: Option<Vec<crate::controllers::{{ macros.get_relation(property) | snake_case }}::{{ macros.get_relation(property) | pascal_case }}>> {{ ',' if not loop.last }}
     {% elif property.type -%}
-    pub {{ macros.rust_var(name,false) }}: {{ macros.get_rust_type(name, property, name in entity.required) }} {{ ',' if not loop.last }}
+    pub {{ rust_types.rust_var(name,false) }}: {{ rust_types.get_rust_type(name, property, name in entity.required) }} {{ ',' if not loop.last }}
     {% endif -%}
     {% endfor %}
 }
@@ -33,7 +32,7 @@ impl From<Model> for {{ entity_name | pascal_case }} {
             created_at: model.created_at,
             last_updated: model.last_updated,
             {% for name, property in entity.properties | items -%}
-            {% set var_name = macros.rust_var(name,false) -%}
+            {% set var_name = rust_types.rust_var(name,false) -%}
             {%- if property.writeOnly or macros.relation_is_many_to_many(property)=='true' or macros.relation_is_one_to_many(property=property)=='true'-%}
             {{ var_name }}: None,
             {% elif property.type -%}
@@ -51,7 +50,7 @@ impl From<ModelEx> for {{ entity_name | pascal_case }} {
             created_at: model.created_at,
             last_updated: model.last_updated,
             {% for name, property in entity.properties | items -%}
-            {% set var_name = macros.rust_var(name,false) -%}
+            {% set var_name = rust_types.rust_var(name,false) -%}
             {%- if property.writeOnly or macros.relation_is_many_to_many(property)=='true' or macros.relation_is_one_to_many(property=property)=='true'-%}
             {{ var_name }}: if model.{{ var_name }}.is_empty() { None } else { Some(model.{{ var_name }}.into_iter().map(crate::controllers::{{ macros.get_relation(property) | snake_case }}::{{ macros.get_relation(property) | pascal_case }}::from).collect()) },
             {% elif property.type -%}
@@ -69,7 +68,7 @@ pub struct {{ entity_name | pascal_case }}Create {
     {%- if macros.relation_is_many_to_many(property)=='true' -%}
     {% continue -%}
     {% elif property.type -%}
-    pub {{ macros.rust_var(name,false) }}: {{ macros.get_rust_type(name, property, name in entity.required) }} {{ ',' if not loop.last }}
+    pub {{ rust_types.rust_var(name,false) }}: {{ rust_types.rust_var(name, property, name in entity.required) }} {{ ',' if not loop.last }}
     {% endif -%}
     {% endfor %}
 }
@@ -81,7 +80,7 @@ pub struct {{ entity_name | pascal_case }}Update {
     {%- if macros.relation_is_many_to_many(property)=='true' -%}
     {% continue -%}
     {% elif property.type -%}
-    pub {{ macros.rust_var(name,false) }}: {{ macros.get_rust_type(name, property, name in entity.required) }} {{ ',' if not loop.last }}
+    pub {{ rust_types.rust_var(name,false) }}: {{ rust_types.rust_var(name, property, name in entity.required) }} {{ ',' if not loop.last }}
     {% endif -%}
     {% endfor %}
 }
@@ -121,7 +120,7 @@ pub struct {{ entity_name | pascal_case }}Patch {
     {%- if macros.relation_is_many_to_many(property)=='true' -%}
     {% continue -%}
     {% elif property.type -%}
-    pub {{ macros.rust_var(name,false) }}: Option<{{ macros.get_rust_type(name, property, name in entity.required) }}> {{ ',' if not loop.last }}
+    pub {{ rust_types.rust_var(name,false) }}: Option<{{ rust_types.rust_var(name, property, name in entity.required) }}> {{ ',' if not loop.last }}
     {% endif -%}
     {% endfor %}
 }
@@ -131,7 +130,7 @@ impl {{ entity_name | pascal_case }}Patch {
         {% for name, property in entity.properties | items -%}
         {%- if property.readOnly or macros.relation_is_many_to_many(property)=='true' -%}{% continue -%}{%- endif -%}
         {%- if property.type -%}
-        if let Some(value) = &self.{{ macros.rust_var(name,false) }} {
+        if let Some(value) = &self.{{ rust_types.rust_var(name,false) }} {
             active_model.{{ name | snake_case }} = Set(value.clone());
         }
         {% endif -%}
@@ -157,7 +156,7 @@ pub async fn list(state: State<AppState>) -> Result<impl IntoResponse, (StatusCo
     let models = Entity::load()
         {% for name, property in entity.properties | items -%}
         {%- if macros.is_relation(property)=='true' -%}
-        .with(crate::models::{{ macros.get_relation(property) | snake_case }}::Entity)
+        .with(crate::models::{{ macros.identifier(macros.get_relation(property)) }}::Entity)
         {% endif -%}
         {% endfor -%}
         .all(&state.db)
@@ -202,7 +201,7 @@ pub async fn read_one(state: State<AppState>, Path(id): Path<i32>) -> Result<imp
         .filter_by_id(id)
         {% for name, property in entity.properties | items -%}
         {%- if macros.is_relation(property)=='true' -%}
-        .with(crate::models::{{ macros.get_relation(property) | snake_case }}::Entity)
+        .with(crate::models::{{ macros.identifier(macros.get_relation(property)) }}::Entity)
         {% endif -%}
         {% endfor -%}
         .one(&state.db)

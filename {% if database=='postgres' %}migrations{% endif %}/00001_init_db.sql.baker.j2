@@ -1,5 +1,5 @@
-{% import "macros.jinja" as macros %}
-{% import "templates/sql_macros.jinja" as sql_macros %}
+{% import "templates/macros.jinja" as macros %}
+{% import "templates/sql/macros.jinja" as sql_macros %}
 
 {# Use the user-provided db_schema (default public) #}
 {% set schema_name = db_schema | default('public') | trim -%}
