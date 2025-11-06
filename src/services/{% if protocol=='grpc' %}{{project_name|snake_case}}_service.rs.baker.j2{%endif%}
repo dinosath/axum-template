@@ -1,6 +1,6 @@
-{% import "templates/macros.jinja" as macros -%}
+{% import "macros.jinja" as macros -%}
 {% for entity_name,entity in entities | items -%}
-{% if entity.properties | items %}
+{% if entity.attributes | items %}
 {% set message = entity_name | pascal_case -%}
 {% set message_plural = entity_name | plural | pascal_case -%}
 {% set message_snake = entity_name | snake_case -%}
@@ -27,7 +27,7 @@ pub mod {{ message_snake }} {
 
     fn create_request_to_active_model(req: Create{{ message }}Request) -> ActiveModel {
         ActiveModel {
-            {% for name, property in entity.properties | items -%}
+            {% for name, property in entity.attributes | items -%}
             {% if macros.relation_is_many_to_many(property)=='true' or macros.relation_is_one_to_many(property)=='true' -%}{% continue %}{% endif -%}
             {{ name | snake_case }}: Set(req.{{ name | snake_case }}),
             {% endfor %}
@@ -38,7 +38,7 @@ pub mod {{ message_snake }} {
     fn update_request_to_active_model(req: Update{{ message }}Request) -> ActiveModel {
         ActiveModel {
             id: Set(parse_uuid(req.id.as_str()).unwrap()),
-            {% for name, property in entity.properties | items -%}
+            {% for name, property in entity.attributes | items -%}
             {% if macros.relation_is_many_to_many(property)=='true' or macros.relation_is_one_to_many(property)=='true' -%}{% continue %}{% endif -%}
             {{ name | snake_case }}: Set(req.{{ name | snake_case }}),
             {% endfor %}
@@ -49,7 +49,7 @@ pub mod {{ message_snake }} {
     fn entity_to_reply(item: Model) -> {{ message }} {
         {{ message }} {
             id: item.id.to_string(),
-            {% for name, property in entity.properties | items -%}
+            {% for name, property in entity.attributes | items -%}
             {% if macros.relation_is_many_to_many(property)=='true' or macros.relation_is_one_to_many(property)=='true' -%}{% continue %}{% endif -%}
             {{ name | snake_case }}: item.{{ name | snake_case }},
             {% endfor %}

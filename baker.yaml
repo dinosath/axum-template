@@ -1,4 +1,5 @@
 schemaVersion: v1
+import_root: "templates"
 template_globs:
   - "**/*.jinja"
   - "*.jinja"
@@ -110,16 +111,7 @@ questions:
   entities:
     type: json
     help: Configure your entities
-    schema: |
-        {
-          "type": "object",
-          "patternProperties": {
-            "^.+$": {
-              "$ref": "https://json-schema.org/draft/2020-12/schema"
-            }
-          },
-          "additionalProperties": false
-        }
+    schema_file: "templates/entities.schema.json"
     default: |
       {
       }

@@ -26,7 +26,7 @@ serde_json = { version = "1.0", default-features = false, features = ["std"] }
 static-serve = "0.4"
 {% endif -%}
 {% if database=='postgres' -%}
-sea-orm = { version = "2.0.0-rc.16", features = ["sqlx-postgres","runtime-tokio-rustls","macros","with-chrono","with-json","with-uuid"] }
+sea-orm = { version = "2.0.0-rc.17", features = ["sqlx-postgres","runtime-tokio-rustls","macros","with-chrono","with-json","with-uuid"] }
 sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "postgres", "migrate", ] }
 {% endif -%}
 utoipa = { version = "5.4", features = ["axum_extras", "uuid", "chrono"] }

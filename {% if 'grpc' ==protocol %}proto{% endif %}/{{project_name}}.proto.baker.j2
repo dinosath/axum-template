@@ -46,11 +46,11 @@ import "google/protobuf/empty.proto";
 import "google/protobuf/wrappers.proto";
 
 {% for entity_name,entity in entities | items -%}
-{% if entity.properties | items %}
+{% if entity.attributes | items %}
 {% set message = entity_name | pascal_case -%}
 {% set message_plural = entity_name | plural | pascal_case -%}
 
-{% for name,property in entity.properties | items | selectattr('1.enum') -%}
+{% for name,property in entity.attributes | items | selectattr('1.enum') -%}
 enum {{ name | pascal_case }} {
         {% for enum in property.enum -%}
         {{ enum }} = {{ loop.index - 1 }};
@@ -62,13 +62,13 @@ message {{ message }} {
     string id = 1;
     google.protobuf.Timestamp created_at = 2;
     google.protobuf.Timestamp updated_at = 3;
-    {% for name, property in entity.properties | items -%}
+    {% for name, property in entity.attributes | items -%}
     {{'optional' if name not in entity.required}} {{ get_proto_type(name, property) }} {{ name | snake_case }} = {{ loop.index + 3 }};
     {% endfor %}
 }
 
 message Create{{ message }}Request {
-    {% for name, property in entity.properties | items -%}
+    {% for name, property in entity.attributes | items -%}
     {{'optional' if name not in entity.required}} {{ get_proto_type(name, property) }} {{ name | snake_case }} = {{ loop.index }};
     {% endfor %}
 }
@@ -77,7 +77,7 @@ message Update{{ message }}Request {
     string id = 1;
     google.protobuf.Timestamp created_at = 2;
     google.protobuf.Timestamp updated_at = 3;
-    {% for name, property in entity.properties | items -%}
+    {% for name, property in entity.attributes | items -%}
     {{'optional' if name not in entity.required}} {{ get_proto_type(name, property) }} {{ name | snake_case }} = {{ loop.index + 3 }};
     {% endfor %}
 }

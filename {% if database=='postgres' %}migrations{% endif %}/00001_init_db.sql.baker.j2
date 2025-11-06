@@ -1,5 +1,5 @@
-{% import "templates/macros.jinja" as macros %}
-{% import "templates/sql/macros.jinja" as sql_macros %}
+{% import "macros.jinja" as macros %}
+{% import "sql/macros.jinja" as sql_macros %}
 
 {# Use the user-provided db_schema (default public) #}
 {% set schema_name = db_schema | default('public') | trim -%}
@@ -29,8 +29,8 @@ BEGIN
 END $$;
 {% endif -%}
 
-{% if entity.properties -%}
-{% for prop_name, prop in entity.properties | items -%}
+{% if entity.attributes -%}
+{% for prop_name, prop in entity.attributes | items -%}
 {% if prop.enum -%}
 DO $$
 BEGIN
@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS {{ schema_name }}.{{ table_name }} (
     {{ sql_macros.pk_column_definition(id_type) }},
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    {% for name, property in entity.properties | items | rejectattr("1.items") -%}
+    {% for name, property in entity.attributes | items | rejectattr("1.items") -%}
     ,
     {% set type = sql_macros.get_sql_type(name, property, name in entity.required) -%}
     {% if property['x-relationship'] and property['x-relationship'].type == 'many-to-one' -%}

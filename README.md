@@ -295,7 +295,7 @@ Many‑to‑many join tables and many‑to‑one foreign keys adopt the same und
 ## Primary Key / Foreign Key Helper Macros
 
 Macros added in `macros.jinja`:
-- `pk_rust_type(id_type)` → `Uuid | i64 | i32`
+- `rust_id_type(id_type)` → `Uuid | i64 | i32`
 - `pk_sql_type(id_type)` → `UUID | BIGINT | INTEGER`
 - `pk_column_definition(id_type)` → Full SQL PK declaration.
 
@@ -330,10 +330,6 @@ docker buildx build --platform linux/amd64,linux/arm64 -t my-app:latest --push .
 2. **Planner stage**: Analyzes dependencies to create a recipe
 3. **Builder stage**: Builds dependencies (cached), then builds your application
 4. **Runtime stage**: Minimal Alpine image with just the binary
-
-## Why Are Some Structs Red in the IDE?
-
-Many files end with `.baker.j2` and contain Jinja template syntax (`{{ ... }}`, `{% ... %}`) that is not valid Rust until Baker renders them. IDE errors here are expected and harmless; the generated project after running Baker will compile with Cargo.
 
 ## Features
 - Rust backend powered by axum
