@@ -1,4 +1,4 @@
-{% import "templates/macros.jinja" as macros %}
+{% import "macros.jinja" as macros %}
 
 {%- macro get_reference(name, property) -%}{% filter trim -%}
 {{ ',FOREIGN KEY( ' ~ name ~' ) REFERENCES ' ~ values.application.name | default('app') ~'.'~ macros.get_relation(property) | plural | snake_case ~ '(id)' if macros.relation_is_many_to_one(property)=='true' }}
@@ -12,9 +12,9 @@ DROP FUNCTION IF EXISTS update_updated_at_column();
 DROP TYPE IF EXISTS {{ entity_name | lower }}_enum CASCADE;
 {% endif -%}
 
-{% if entity.properties -%}
+{% if entity.attributes -%}
 
-{% for prop_name, prop in entity.properties | items -%}
+{% for prop_name, prop in entity.attributes | items -%}
     {% if prop.enum -%}
 DROP TYPE IF EXISTS {{prop_name | lower}} CASCADE;
     {% endif -%}
