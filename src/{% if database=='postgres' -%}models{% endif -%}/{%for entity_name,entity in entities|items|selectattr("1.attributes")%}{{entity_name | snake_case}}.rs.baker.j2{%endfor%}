@@ -8,10 +8,11 @@ use sea_orm::entity::prelude::*;
 
 
 {% for name,property in entity.attributes | items | selectattr('1.enum') -%}
-#[derive(PartialEq, Clone, Debug, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
+#[derive(PartialEq, Clone, Debug, Default, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
 #[sea_orm(rs_type = "String", db_type = "String(StringLen::None)", enum_name = "{{ name | snake_case }}")]
 pub enum {{ name | pascal_case }}{
         {% for enum in property.enum -%}
+        {{ '#[default]' if (property.default and enum == property.default) or (not property.default and loop.first) }}
         #[sea_orm(string_value = "{{ enum | snake_case }}")]
         {{ rust_types.rust_var(enum,true) }}{%- if not loop.last -%},{% endif -%}
         {% endfor %}

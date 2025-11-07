@@ -13,7 +13,7 @@ use crate::models::{{ rust_types.identifier(entity_name) }}::{ActiveModel, Entit
 use super::{ {%- for rel in macros.get_all_relations(entity)|split(',') %}{{ rust_types.identifier(rel| trim | snake_case)  }}::{{rel}} as {{ rel | trim }}{% if not loop.last %}, {% endif -%}{% endfor -%} };
 {% endif -%}
 
-#[derive(Clone, Debug, Deserialize,Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct {{ entity_name | pascal_case }} {
     pub id: {{ rust_types.rust_id_type(id_type) | trim}},
     pub created_at: DateTime,
@@ -24,6 +24,19 @@ pub struct {{ entity_name | pascal_case }} {
     {% endfor %}
 }
 
+impl From<Model> for {{ entity_name | pascal_case }} {
+    fn from(model: Model) -> Self {
+        Self {
+            id: model.id,
+            created_at: model.created_at,
+            last_updated: model.last_updated,
+            {% for name, property in entity.attributes | items -%}
+            {{ rust_types.rust_var(name,false) }}: {{ rust_types.from_model_value(name,property) }} {{- ',' if not loop.last }}
+            {% endfor %}
+        }
+    }
+}
+
 impl From<ModelEx> for {{ entity_name | pascal_case }} {
     fn from(model: ModelEx) -> Self {
         Self {
@@ -32,10 +45,10 @@ impl From<ModelEx> for {{ entity_name | pascal_case }} {
             last_updated: model.last_updated,
             {% for name, property in entity.attributes | items -%}
             {% set var_name = rust_types.rust_var(name,false) -%}
-            {%- if property.writeOnly or macros.relation_is_many_to_many(property)=='true' or macros.relation_is_one_to_many(property=property)=='true'-%}
-            {{ var_name }}: if model.{{ var_name }}.is_empty() { None } else { Some(model.{{ var_name }}.into_iter().map(crate::controllers::{{ macros.get_relation(property) | snake_case }}::{{ macros.get_relation(property) | pascal_case }}::from).collect()) },
-            {%- elif macros.relation_is_many_to_one(property)=='true' or macros.relation_is_one_to_one(property=property)=='true'-%}
-            {{ var_name }}: model.{{ var_name }}.into_option().map(Into::into).unwrap(),
+            {% if property.writeOnly or macros.relation_is_many_to_many(property)=='true' or macros.relation_is_one_to_many(property=property)=='true'-%}
+            {{ var_name }}: {{'Some(' if not property.required }}model.{{ var_name }}.into_iter().map({{ macros.get_relation(property) | pascal_case }}::from).collect(){{')' if not property.required}},
+            {% elif macros.relation_is_many_to_one(property)=='true' or macros.relation_is_one_to_one(property=property)=='true'-%}
+            {{ var_name }}: model.{{ var_name }}.into_option().map(Into::into){{'.unwrap_or_default()' if property.required}},
             {% elif property.type -%}
             {{ var_name }}: model.{{ var_name }},
             {% endif -%}
@@ -53,14 +66,14 @@ pub struct {{ entity_name | pascal_case }}Create {
 }
 
 impl From<{{ entity_name | pascal_case }}Create> for ActiveModel {
-    fn from(params: {{ entity_name | pascal_case }}Create) -> Self {
+    fn from(source: {{ entity_name | pascal_case }}Create) -> Self {
         ActiveModel {
             {% for name, property in entity.attributes | items -%}
             {%- if property.readOnly or macros.relation_is_many_to_many(property)=='true' or macros.relation_is_one_to_many(property)=='true' -%}{% continue -%}{%- endif -%}
             {%- if macros.relation_is_many_to_one(property)=='true' or macros.relation_is_one_to_one(property=property)=='true'-%}
-            {{ name }}_id: Set(params.{{ rust_types.rust_var(name,false) }}.id.clone()),
+            {{ name }}_id: Set(source.{{ rust_types.rust_var(name,false) }}{{ '.unwrap_or_default()' if not property.required }}.id.clone()),
             {%- elif property.type  -%}
-            {{ rust_types.rust_var(name,false) }}: Set(params.{{ name | snake_case }}.clone()),
+            {{ rust_types.rust_var(name,false) }}: Set(source.{{ name | snake_case }}.clone()),
             {% endif -%}
             {%- endfor -%}
             ..Default::default()
@@ -76,15 +89,16 @@ pub struct {{ entity_name | pascal_case }}Update {
     {% endfor %}
 }
 
-impl From<{{ entity_name | pascal_case }}Update> for ActiveModel {
-    fn from(params: {{ entity_name | pascal_case }}Update) -> Self {
+impl {{ entity_name | pascal_case }}Update {
+    fn into_active_model(self, id:{{ rust_types.rust_id_type(id_type) | trim}}) -> ActiveModel {
         ActiveModel {
+            id: Set(id),
             {% for name, property in entity.attributes | items -%}
             {%- if property.readOnly or macros.relation_is_many_to_many(property)=='true' or macros.relation_is_one_to_many(property)=='true' -%}{% continue -%}{%- endif -%}
             {%- if macros.relation_is_many_to_one(property)=='true' or macros.relation_is_one_to_one(property=property)=='true'-%}
-            {{ name }}_id: Set(params.{{ rust_types.rust_var(name,false) }}.id.clone()),
+            {{ name }}_id: Set(self.{{ rust_types.rust_var(name,false) }}{{ '.unwrap_or_default()' if not property.required }}.id.clone()),
             {% elif property.type  -%}
-            {{ rust_types.rust_var(name,false) }}: Set(params.{{ name | snake_case }}.clone()),
+            {{ rust_types.rust_var(name,false) }}: Set(self.{{ name | snake_case }}.clone()),
             {% endif -%}
             {%- endfor -%}
             ..Default::default()
@@ -96,18 +110,35 @@ impl From<{{ entity_name | pascal_case }}Update> for ActiveModel {
 pub struct {{ entity_name | pascal_case }}Patch {
     {% for name, property in entity.attributes | items -%}
     {%- if property.readOnly-%}{% continue -%}{%- endif -%}
-    pub {{ rust_types.rust_var(name,false) }}: {{ rust_types.get_rust_type(name, property) }} {{- ',' if not loop.last }}
+    {%- set base_type = rust_types.get_rust_primitive(name, property) -%}
+    {%- if property.type == 'relation' -%}
+        {%- if macros.relation_is_many_to_many(property)=='true' or macros.relation_is_one_to_many(property)=='true' -%}
+            {%- set base_type = 'Vec<' ~ base_type ~ '>' -%}
+        {%- endif -%}
+    {%- endif -%}
+    pub {{ rust_types.rust_var(name,false) }}: Option<{{ base_type }}> {{- ',' if not loop.last }}
     {% endfor %}
 }
 
 impl {{ entity_name | pascal_case }}Patch {
     pub fn patch_active_model(&self, active_model: &mut ActiveModel) {
         {% for name, property in entity.attributes | items -%}
-        {%- if property.readOnly or macros.relation_is_many_to_many(property)=='true' -%}{% continue -%}{%- endif -%}
+        {%- if property.readOnly or macros.relation_is_many_to_many(property)=='true' or macros.relation_is_one_to_many(property)=='true' -%}{% continue -%}{%- endif -%}
         {%- if property.type -%}
-        if let Some(value) = &self.{{ rust_types.rust_var(name,false) }} {
+        {%- set var_name = rust_types.rust_var(name,false) -%}
+        {%- if macros.relation_is_many_to_one(property)=='true' or macros.relation_is_one_to_one(property)=='true' -%}
+        if let Some(value) = &self.{{ var_name }} {
+            active_model.{{ name | snake_case }}_id = Set(value.id.clone());
+        }
+        {%- elif property.required -%}
+        if let Some(value) = &self.{{ var_name }} {
             active_model.{{ name | snake_case }} = Set(value.clone());
         }
+        {%- else -%}
+        if self.{{ var_name }}.is_some() {
+            active_model.{{ name | snake_case }} = Set(self.{{ var_name }}.clone());
+        }
+        {%- endif -%}
         {% endif -%}
         {% endfor %}
     }
@@ -158,7 +189,17 @@ pub async fn patch_one(state: State<AppState>, Path(id): Path<i32>, Json(patch):
     patch.patch_active_model(&mut active_model);
     let model = active_model.update(&state.db)
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"failed to insert item": e.to_string()}))))?;
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"failed to update item": e.to_string()}))))?;
+    let resp: {{ entity_name | pascal_case }} = model.into();
+    Ok(Json(resp))
+}
+
+pub async fn put_one(state: State<AppState>, Path(id): Path<i32>, Json(update): Json<{{ entity_name | pascal_case }}Update>) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    let _ = load_item(&state.db, id).await?;
+    let active_model = update.into_active_model(id);
+    let model = active_model.update(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"failed to update item": e.to_string()}))))?;
     let resp: {{ entity_name | pascal_case }} = model.into();
     Ok(Json(resp))
 }
@@ -194,4 +235,5 @@ pub fn routes() -> Router<AppState> {
         .route("/{{ entity.title | plural | kebab_case  }}/{id}", get(read_one))
         .route("/{{ entity.title | plural | kebab_case  }}/{id}", delete(remove))
         .route("/{{ entity.title | plural | kebab_case  }}/{id}", patch(patch_one))
+        .route("/{{ entity.title | plural | kebab_case  }}/{id}", put(put_one))
 }
