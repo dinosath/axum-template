@@ -14,7 +14,7 @@ COPY . .
 RUN cargo build --release
 RUN upx --best --lzma /app/target/release/{{project_name}}
 
-{% if serve_static_content == 'true' -%}
+{% if serve_static_content -%}
 FROM node:20-slim AS node
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
@@ -28,7 +28,7 @@ RUN pnpm build
 
 FROM gcr.io/distroless/static-debian12
 COPY --from=builder /app/target/release/{{project_name}} /
-{% if frontend_framework != 'none' -%}
+{% if serve_static_content -%}
 COPY --from=node /app/dist /app/static
 {% endif %}
 
