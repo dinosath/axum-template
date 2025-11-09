@@ -9,12 +9,9 @@ use axum::Router;
 use crate::app_state::AppState;
 
 /// Returns a Router with all entity controllers merged.
-pub fn routes(prefix:&str, state:AppState) -> Router {
-    let router = Router::new()
+pub fn routes() -> Router<AppState> {
+    Router::new()
         {% for entity_name,entity in entities | items | selectattr("1.attributes")-%}
         .merge({{rust_types.identifier(entity_name)}}::routes())
-        {% endfor -%};
-    Router::new()
-        .nest(prefix, router)
-        .with_state(state)
+        {% endfor %}
 }

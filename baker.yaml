@@ -39,6 +39,12 @@ questions:
     choices:
       - postgres
 
+  use_sqlx_migrations:
+    type: bool
+    help: Do you want to use sqlx migrations?
+    default: false
+    ask_if: database == 'postgres'
+  
   db_schema:
     type: str
     help: What PostgreSQL schema should tables be created in?
