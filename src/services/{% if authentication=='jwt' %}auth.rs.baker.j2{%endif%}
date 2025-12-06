@@ -1,0 +1,87 @@
+use axum_gate::accounts::AccountInsertService;
+use axum_gate::prelude::*;
+use axum_gate::repositories::sea_orm::SeaOrmRepository;
+
+use std::sync::Arc;
+
+use axum::extract::{Json, State};
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
+use axum::routing::{Router, get, post};
+use axum_gate::accounts::AccountRepository;
+use axum_gate::hashing::argon2::Argon2Hasher;
+use axum_gate::secrets::{Secret, SecretRepository};
+use sea_orm::entity::prelude::DateTimeUtc;
+use chrono::{TimeDelta, Utc};
+use sea_orm::{ConnectionTrait, DbBackend, DbConn, Schema};
+use serde_json::json;
+use sea_query::table::TableCreateStatement;
+use tracing::debug;
+use crate::app_state::AppState;
+use crate::controllers::branch::Branch;
+
+#[derive(serde::Deserialize)]
+struct PasswordUpdate {
+    user_id: String,
+    new_password: String,
+}
+
+#[derive(serde::Deserialize)]
+struct AccountUpdate {
+    user_id: String,
+    roles: Vec<Role>,
+    groups: Vec<String>,
+}
+
+pub async fn login(state: State<AppState>) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    let registered_claims = RegisteredClaims::new(
+        "auth-node",
+        (Utc::now() + TimeDelta::weeks(1)).timestamp() as u64,
+    );
+    let secrets_repository = Arc::clone(&secrets_repository);
+    let account_repository = Arc::clone(&account_repository);
+    let jwt_codec = Arc::clone(&jwt_codec);
+    let cookie_template = axum_gate::cookie_template::CookieTemplate::recommended();
+    axum_gate::route_handlers::login(
+        cookie_jar,
+        credentials,
+        registered_claims,
+        secrets_repository,
+        account_repository,
+        jwt_codec,
+        cookie_template,
+    )
+}
+
+
+async fn setup_database_schema(db: &DbConn) {
+    db.get_schema_registry("axum_gate::repositories::sea_orm::models::*").sync(&db).await?;
+    log::info!("Auth database schema setup complete.");
+}
+
+pub async fn setup_auth_service(state: &AppState) -> Router<AppState> {
+    let shared_secret = dotenvy::var("AXUM_GATE_SHARED_SECRET").expect("AXUM_GATE_SHARED_SECRET env var not set.");
+    let db = state.db.clone();
+    let jwt_options = JsonWebTokenOptions {
+        enc_key: axum_gate::jsonwebtoken::EncodingKey::from_secret(shared_secret.as_bytes()),
+        dec_key: axum_gate::jsonwebtoken::DecodingKey::from_secret(shared_secret.as_bytes()),
+        header: Some(axum_gate::jsonwebtoken::Header::default()),
+        validation: Some(axum_gate::jsonwebtoken::Validation::default()),
+    };
+    let jwt_codec = Arc::new(JsonWebToken::<JwtClaims<Account<Role, Group>>>::new_with_options(jwt_options));
+    setup_database_schema(&db)?.await;
+
+    let account_repository = Arc::new(SeaOrmRepository::new(&db).unwrap());
+    debug!("Account repository initialized.");
+    let secrets_repository = Arc::clone(&account_repository);
+    debug!("Secrets repository initialized.");
+    let cookie_template = axum_gate::cookie_template::CookieTemplate::recommended();
+}
+
+/// Expose prebuilt routes for easy nesting under `/auth`.
+/// In your server:
+///   .nest("/auth", crate::services::auth::auth_routes())
+pub fn auth_routes() -> Router<AppState> {
+    Router::new()
+        .route("/health", get(health))
+}

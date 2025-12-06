@@ -1,4 +1,6 @@
 templates
 templates/**
+!templates/helm
+!templates/helm/**
 macros.jinja
 .idea

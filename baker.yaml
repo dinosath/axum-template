@@ -44,7 +44,7 @@ questions:
     help: Do you want to use sqlx migrations?
     default: false
     ask_if: database == 'postgres'
-  
+
   db_schema:
     type: str
     help: What PostgreSQL schema should tables be created in?
@@ -68,6 +68,7 @@ questions:
       - open-telemetry
     choices:
       - open-telemetry
+      - helm
 
   protocol:
     type: str
@@ -117,7 +118,7 @@ questions:
   entities:
     type: json
     help: Configure your entities
-    schema_file: "templates/entities.schema.json"
+    schema_file: "templates/strapi.schema.json"
     default: |
       {
       }

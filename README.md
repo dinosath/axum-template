@@ -340,5 +340,17 @@ docker buildx build --platform linux/amd64,linux/arm64 -t my-app:latest --push .
 - Flexible code generation via baker
 - Generate either a minimal project or a full CRUD app based on your entity definitions
 
+### HTTP Content-Range Header
+
+When returning paginated resources, include the `Content-Range` header to indicate the range of items in the response and the total count.
+
+| Header | Format | Description |
+|--------|--------|-------------|
+| `Content-Range` | `{resource} {start}-{end}/{total}` | Current range and total count |
+
+Examples:
+- `Content-Range: items 0-24/100` for the first 25 items out of 100 total.
+- `Content-Range: users 50-99/250` for items 51–100 out of 250 total.
+
 ## License
 MIT

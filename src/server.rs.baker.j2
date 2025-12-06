@@ -7,6 +7,9 @@ use sea_orm::{Database, DatabaseConnection};
 use std::{env, error::Error};
 use tokio::net::TcpListener;
 use crate::app_state::AppState;
+{% if authentication=='jwt'-%}
+use crate::services::auth::setup_auth_state;
+{% endif -%}
 {% if static_includes | length > 0 -%}
 use static_serve::embed_assets;
 
@@ -19,12 +22,13 @@ embed_assets!("{{ entry.assets_dir }}", compress = true, strip_html_ext = true);
 pub async fn init_db() -> Result<DatabaseConnection, Box<dyn std::error::Error>> {
     let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432".to_string());
     let db: DatabaseConnection = Database::connect(&database_url).await?;
-    db.get_schema_registry("{{project_name}}::models::*").sync(&db).await?;
     {% if use_sqlx_migrations -%}
     info!("🔄 Running database migrations...");
     let pool = PgPoolOptions::new().max_connections(5).connect(&database_url).await?;
     if let Err(e) = sqlx::migrate!("./migrations").run(&pool).await { error!("❌ Failed migrations: {e}"); return Err(e.into()); }
     info!("✅ Database migrations completed successfully!");
+    {% else %}
+    db.get_schema_registry("{{project_name}}::models::*").sync(&db).await?;
     {% endif -%}
     Ok(db)
 }
@@ -45,10 +49,21 @@ pub async fn run() -> Result<(), Box<dyn Error>> {
     let actual_port = listener.local_addr()?.port();
     info!("Server starting on port {}", actual_port);
 
-    let state = AppState {  {{- 'db' if database=='postgres' -}} };
+    {% if authentication=='jwt' -%}
+    let (auth_state) = setup_auth_state(&&db).await;
+    {% endif -%}
+    let state = AppState {
+        {{- 'db,' if database=='postgres' -}}
+        {% if authentication=='jwt' -%}
+        account_repository: auth_state.account_repository,
+        secrets_repository: auth_state.secrets_repository,
+        jwt_codec: auth_state.jwt_codec,
+        cookie_template: auth_state.cookie_template,
+        {% endif -%}
+    };
     let app = Router::new()
         {{ '.merge(static_router())' if static_includes | length > 0 }}
-        {{ '.nest("/auth", crate::services::oidc::build_oidc())' if protocol=='rest' and authentication=='oidc' }}
+        {{ '.nest("/auth", crate::services::auth::auth_routes())' if protocol=='rest' and authentication=='oidc' }}
         .nest("/api", crate::controllers::routes())
         .with_state(state);
 

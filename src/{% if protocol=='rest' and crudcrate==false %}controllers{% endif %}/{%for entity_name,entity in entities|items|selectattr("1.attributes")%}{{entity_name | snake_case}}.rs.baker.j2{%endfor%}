@@ -2,7 +2,7 @@
 {% import "rust/types.jinja" as rust_types -%}
 {% set model = entity_name | plural | pascal_case -%}
 use serde_json::json;
-use axum::{Router, extract::{Path, State}, http::StatusCode, routing::{delete, get, patch, post, put}, response::IntoResponse, Json};
+use axum::{Router, extract::{Path, State}, http::{HeaderMap, HeaderValue, StatusCode}, routing::{delete, get, patch, post, put}, response::IntoResponse, Json};
 use serde::{Deserialize, Serialize};
 use sea_orm::{ActiveModelTrait, ModelTrait, EntityTrait, Set, IntoActiveModel, ConnectionTrait};
 use sea_orm::EntityLoaderTrait;
@@ -10,7 +10,7 @@ use sea_orm::prelude::*;
 use crate::app_state::AppState;
 use crate::models::{{ rust_types.identifier(entity_name) }}::{ActiveModel, Entity, Model, ModelEx, {% for name,property in entity.attributes | items | selectattr('1.enum') -%}{{ rust_types.identifier(name) | pascal_case }}{% endfor -%}};
 {% if entity.attributes | items | selectattr('1.type','equalto','relation') | length > 0 -%}
-use super::{ {%- for rel in macros.get_all_relations(entity)|split(',') %}{{ rust_types.identifier(rel| trim | snake_case)  }}::{{rel}} as {{ rel | trim }}{% if not loop.last %}, {% endif -%}{% endfor -%} };
+use super::{ {%- for rel in macros.get_all_relations(entity)|split(',') %}{{ rust_types.identifier(rel| trim | snake_case)  }}::{{rel | pascal_case}} as {{ rel | trim | pascal_case}}{% if not loop.last %}, {% endif -%}{% endfor -%} };
 {% endif -%}
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -48,7 +48,7 @@ impl From<ModelEx> for {{ entity_name | pascal_case }} {
             {% if property.writeOnly or macros.relation_is_many_to_many(property)=='true' or macros.relation_is_one_to_many(property=property)=='true'-%}
             {{ var_name }}: {{'Some(' if not property.required }}model.{{ var_name }}.into_iter().map({{ macros.get_relation(property) | pascal_case }}::from).collect(){{')' if not property.required}},
             {% elif macros.relation_is_many_to_one(property)=='true' or macros.relation_is_one_to_one(property=property)=='true'-%}
-            {{ var_name }}: model.{{ var_name }}.into_option().map(Into::into){{'.unwrap_or_default()' if property.required}},
+            {{ var_name }}: model.{{ var_name }}.into_option().map(|p| Box::new(p.into())){{'.unwrap_or_default()' if property.required}},
             {% elif property.type -%}
             {{ var_name }}: model.{{ var_name }},
             {% endif -%}
@@ -71,7 +71,7 @@ impl From<{{ entity_name | pascal_case }}Create> for ActiveModel {
             {% for name, property in entity.attributes | items -%}
             {%- if property.readOnly or macros.relation_is_many_to_many(property)=='true' or macros.relation_is_one_to_many(property)=='true' -%}{% continue -%}{%- endif -%}
             {%- if macros.relation_is_many_to_one(property)=='true' or macros.relation_is_one_to_one(property=property)=='true'-%}
-            {{ name }}_id: Set(source.{{ rust_types.rust_var(name,false) }}{{ '.unwrap_or_default()' if not property.required }}.id.clone()),
+            {{ name | snake_case }}_id: Set(source.{{ rust_types.rust_var(name,false) }}{{ '.unwrap_or_default()' if not property.required }}.id.clone()),
             {%- elif property.type  -%}
             {{ rust_types.rust_var(name,false) }}: Set(source.{{ name | snake_case }}.clone()),
             {% endif -%}
@@ -96,7 +96,7 @@ impl {{ entity_name | pascal_case }}Update {
             {% for name, property in entity.attributes | items -%}
             {%- if property.readOnly or macros.relation_is_many_to_many(property)=='true' or macros.relation_is_one_to_many(property)=='true' -%}{% continue -%}{%- endif -%}
             {%- if macros.relation_is_many_to_one(property)=='true' or macros.relation_is_one_to_one(property=property)=='true'-%}
-            {{ name }}_id: Set(self.{{ rust_types.rust_var(name,false) }}{{ '.unwrap_or_default()' if not property.required }}.id.clone()),
+            {{ name | snake_case }}_id: Set(self.{{ rust_types.rust_var(name,false) }}{{ '.unwrap_or_default()' if not property.required }}.id.clone()),
             {% elif property.type  -%}
             {{ rust_types.rust_var(name,false) }}: Set(self.{{ name | snake_case }}.clone()),
             {% endif -%}
@@ -114,6 +114,8 @@ pub struct {{ entity_name | pascal_case }}Patch {
     {%- if property.type == 'relation' -%}
         {%- if macros.relation_is_many_to_many(property)=='true' or macros.relation_is_one_to_many(property)=='true' -%}
             {%- set base_type = 'Vec<' ~ base_type ~ '>' -%}
+        {%- elif macros.relation_is_many_to_one(property)=='true' or macros.relation_is_one_to_one(property)=='true' -%}
+            {%- set base_type = 'Box<' ~ base_type ~ '>' -%}
         {%- endif -%}
     {%- endif -%}
     pub {{ rust_types.rust_var(name,false) }}: Option<{{ base_type }}> {{- ',' if not loop.last }}
@@ -170,7 +172,14 @@ pub async fn list(state: State<AppState>) -> Result<impl IntoResponse, (StatusCo
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))))?;
     let responses: Vec<{{ entity_name | pascal_case }}> = models.into_iter().map(Into::into).collect();
 
-    Ok(Json(responses))
+    let total = responses.len() as u64;
+    let start: u64 = 0;
+    let end: u64 = if total == 0 { 0 } else { total - 1 };
+    let mut headers = HeaderMap::new();
+    let content_range_value = format!("items {}-{}/{}", start, end, total);
+    headers.insert("Content-Range", HeaderValue::from_str(&content_range_value).unwrap());
+    headers.insert("Accept-Ranges", HeaderValue::from_static("items"));
+    Ok((StatusCode::OK, headers, Json(responses)))
 }
 
 pub async fn create(state: State<AppState>, Json(create): Json<{{ entity_name | pascal_case }}Create>) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
@@ -230,10 +239,10 @@ pub async fn read_one(state: State<AppState>, Path(id): Path<i32>) -> Result<imp
 
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route("/{{ entity.title | plural | kebab_case  }}", get(list))
-        .route("/{{ entity.title | plural | kebab_case  }}", post(create))
-        .route("/{{ entity.title | plural | kebab_case  }}/{id}", get(read_one))
-        .route("/{{ entity.title | plural | kebab_case  }}/{id}", delete(remove))
-        .route("/{{ entity.title | plural | kebab_case  }}/{id}", patch(patch_one))
-        .route("/{{ entity.title | plural | kebab_case  }}/{id}", put(put_one))
+        .route("/{{ entity.info.name | plural | kebab_case  }}", get(list))
+        .route("/{{ entity.info.name | plural | kebab_case  }}", post(create))
+        .route("/{{ entity.info.name | plural | kebab_case  }}/{id}", get(read_one))
+        .route("/{{ entity.info.name | plural | kebab_case  }}/{id}", delete(remove))
+        .route("/{{ entity.info.name | plural | kebab_case  }}/{id}", patch(patch_one))
+        .route("/{{ entity.info.name | plural | kebab_case  }}/{id}", put(put_one))
 }

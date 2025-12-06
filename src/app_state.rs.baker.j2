@@ -1,6 +1,20 @@
+{% if authentication=='jwt' -%}
+use axum_gate::{
+    cookie_template::CookieTemplate,
+    prelude::{Account, Group, JsonWebToken, JwtClaims, Role},
+    repositories::sea_orm::SeaOrmRepository,
+};
+{% endif -%}
 {{ 'use sea_orm::DatabaseConnection;' if database=='postgres' }}
+{{ 'use std::sync::Arc;' if authentication=='jwt' }}
 
 #[derive(Clone)]
 pub struct AppState {
     {{ 'pub db: DatabaseConnection,' if database=='postgres' }}
+    {% if authentication=='jwt' -%}
+    pub account_repository: Arc<SeaOrmRepository>,
+    pub secrets_repository: Arc<SeaOrmRepository>,
+    pub jwt_codec: Arc<JsonWebToken<JwtClaims<Account<Role, Group>>>>,
+    pub cookie_template :CookieTemplate,
+    {% endif -%}
 }

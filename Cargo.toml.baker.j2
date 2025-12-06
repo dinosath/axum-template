@@ -16,6 +16,8 @@ dotenvy = "0.15"
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "json"] }
 {% if authentication=='oidc'-%}
 axum-oidc = { version = "0.6", default-features = false }
+{% elif authentication=='jwt'-%}
+axum-gate = { version = "1.1", features = ["storage-seaorm-v2"] }
 {% endif -%}
 anyhow = "1.0"
 env_logger = { version = "0.11", default-features = false, features = ["auto-color", "humantime"] }
@@ -26,7 +28,7 @@ serde_json = { version = "1.0", default-features = false, features = ["std"] }
 static-serve = "0.4"
 {% endif -%}
 {% if database=='postgres' -%}
-sea-orm = { version = "2.0.0-rc.19", features = ["sqlx-postgres","runtime-tokio-rustls","macros","with-chrono","with-json","with-uuid","schema-sync","entity-registry"] }
+sea-orm = { version = "2.0.0-rc.20", features = ["sqlx-postgres","runtime-tokio-rustls","macros","with-chrono","with-json","with-uuid","schema-sync","entity-registry","rbac"] }
 {{ 'sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "postgres", "migrate", ]}' if use_sqlx_migrations }}
 {% endif -%}
 utoipa = { version = "5.4", features = ["axum_extras", "uuid", "chrono"] }
@@ -37,7 +39,7 @@ prost = "0.13"
 tonic = "0.13"
 prost-types = "0.13"
 {% endif -%}
-tokio = { version = "1.47", default-features = false, features = ["rt-multi-thread", "macros", "net", "signal"] }
+tokio = { version = "1.48", default-features = false, features = ["rt-multi-thread", "macros", "net", "signal"] }
 {% if 'grpc'==protocol -%}
 [build-dependencies]
 tonic-build = "0.13"
@@ -48,8 +50,8 @@ tower-sessions = { version = "0.14", default-features = false, features = ["memo
 {% endif %}
 
 [dev-dependencies]
-testcontainers = "0.25"
-testcontainers-modules = { version = "0.13", features = ["postgres"] }
+testcontainers = "0.26"
+testcontainers-modules = { version = "0.14.0", features = ["postgres"] }
 reqwest = { version = "0.12", features = ["json", "cookies"] }
 tokio-test = "0.4"
 serial_test = "3.2"
