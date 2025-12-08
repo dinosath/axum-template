@@ -2,20 +2,22 @@
 
 {% macro seaorm_derive(name,property) -%}
 {% if property and property.unique -%}
-#[sea_orm(unique)]
+    #[sea_orm(unique)]
 {% endif -%}
-{%  if property.type=='relation' -%}
-{%      if macros.relation_is_many_to_many(property)=='true' -%}
+{% if property.type=='relation' -%}
+{% if macros.relation_is_many_to_many(property)=='true' -%}
 #[sea_orm(has_many, via = "{{ macros.m2m_junction_table(entity_name,property) | snake_case }}" )]
-{%      elif macros.relation_is_one_to_many(property)=='true' -%}
+{% elif macros.relation_is_one_to_many(property)=='true' -%}
 #[sea_orm(has_many)]
-{%      elif macros.relation_is_many_to_one(property)=='true' -%}
-#[sea_orm(unique)]
-pub {{name}}_id: {{ rust_types.rust_id_type(id_type) }},
-#[sea_orm(belongs_to, from = "{{name}}_id", to = "id")]
-{%      endif -%}
-{%  endif -%}
-{%- endmacro -%}
+{% elif macros.relation_is_many_to_one(property)=='true' -%}
+{% filter trim %}
+    #[sea_orm(unique)]
+    pub {{name | snake_case}}_id: {{ rust_id_type(id_type) }},
+    #[sea_orm(belongs_to, from = "{{name | snake_case}}_id", to = "id")]
+{% endfilter %}
+{% endif %}
+{% endif %}
+{% endmacro -%}
 
 {%- macro get_rust_primitive(name, property) -%}
 {% filter trim %}
@@ -23,7 +25,7 @@ pub {{name}}_id: {{ rust_types.rust_id_type(id_type) }},
     {%- if property.type == 'enumeration' -%}
         {{ name | pascal_case }}
     {%- elif property.type == 'relation' -%}
-        {{ property.target }}
+        {{ property.target | pascal_case }}
     {%- elif property.type == 'string' -%}
         {%- if property.format == 'uuid' -%}
             Uuid
@@ -83,10 +85,10 @@ pub {{name}}_id: {{ rust_types.rust_id_type(id_type) }},
 {% filter trim %}
     {%- set type = get_rust_primitive(name, property) -%}
     {%- if property.type == 'relation' -%}
-        {%- if macros.relation_is_many_to_many(property)=='true' -%}
+        {%- if macros.relation_is_many_to_many(property)=='true' or macros.relation_is_one_to_many(property)=='true' -%}
             {% set type = 'Vec<' ~ type ~ '>' %}
-        {%- elif macros.relation_is_one_to_many(property)=='true' -%}
-            {% set type = 'Vec<' ~ type ~ '>' %}
+        {%- elif macros.relation_is_one_to_one(property)=='true' or macros.relation_is_many_to_one(property)=='true' -%}
+            {% set type = 'Box<' ~ type ~ '>' %}
         {%- endif -%}
     {%- endif -%}
     {%- if property.required -%}
@@ -229,7 +231,7 @@ pub {{name}}_id: {{ rust_types.rust_id_type(id_type) }},
     {%- if property.required and macros.relation_is_many_to_many(property)=='true' or macros.relation_is_one_to_many(property)=='true' -%}
     vec![].into()
     {%- elif property.required and macros.is_relation(property)=='true' -%}
-    {{ property.target | pascal_case }}::default()
+    Box::new({{ property.target | pascal_case }}::default())
     {%- elif macros.is_relation(property)=='true' and not property.required -%}
     None
     {%- else -%}

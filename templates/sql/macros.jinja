@@ -43,15 +43,20 @@
 {%- endfilter %}{%- endmacro -%}
 
 {% macro add_foreign_key(name, property, schema_name, id_type) -%}
-{% if property['x-relationship'] and property['x-relationship'].type == 'many-to-one' -%}
+{% filter trim -%}
+{%- if macros.is_relation(property)=='true' and macros.relation_is_many_to_one(property)=='true' -%}
     {% if id_type == 'uuid' -%}
-    {{ name | snake_case }} UUID, FOREIGN KEY( {{ name | snake_case }} ) REFERENCES {{ schema_name }}.{{ property['x-relationship'].target | plural | snake_case }}(id)
+    {{ name | foreign_key }} UUID,
+    FOREIGN KEY( {{ name | foreign_key }} ) REFERENCES {{ schema_name }}.{{ macros.get_relation(property) | plural | snake_case }}(id)
     {% elif id_type == 'big_integer' -%}
-    {{ name | snake_case }} BIGINT, FOREIGN KEY( {{ name | snake_case }} ) REFERENCES {{ schema_name }}.{{ property['x-relationship'].target | plural | snake_case }}(id)
+    {{ name | foreign_key }} BIGINT,
+    FOREIGN KEY( {{ name | foreign_key }} ) REFERENCES {{ schema_name }}.{{ macros.get_relation(property) | plural | snake_case }}(id)
     {% else -%}
-    {{ name | snake_case }} INTEGER, FOREIGN KEY( {{ name | snake_case }} ) REFERENCES {{ schema_name }}.{{ property['x-relationship'].target | plural | snake_case }}(id)
+    {{ name | foreign_key }} INTEGER,
+    FOREIGN KEY( {{ name | foreign_key }} ) REFERENCES {{ schema_name }}.{{ macros.get_relation(property) | plural | snake_case }}(id)
     {% endif -%}
 {% endif -%}
+{% endfilter -%}
 {% endmacro -%}
 
 {# New: primary key column definition macro exposed from sql layer #}

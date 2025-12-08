@@ -112,5 +112,3 @@
 {%- macro m21_relation_equal_name(name,property) -%}{% if relation_is_many_to_one(property)=='true' and property.target|snake_case == name|snake_case %}true{% else %}false{% endif %}{%- endmacro %}
 
 {%- macro is_enum(property) -%}{% if property.enum and property.enum|length > 0 %}true{% else %}false{% endif %}{%- endmacro %}
-
-{%- macro get_table_name(entity_name) -%}{{ entity_name | snake_case }}{%- endmacro %}
