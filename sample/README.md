@@ -1,10 +1,17 @@
 # Sample Project Generator
 
-This directory contains the configuration to generate a sample project from the axum-template for testing purposes.
+This directory contains configuration files to generate sample projects from the axum-template for testing purposes.
 
 ## Overview
 
-The `answers.yaml` file contains all the configuration needed to generate a complete project with:
+Two answer files are provided to test different API protocols:
+
+| File | Protocol | Description |
+|------|----------|-------------|
+| `answers-rest.yaml` | REST | Generates a REST API with Axum controllers |
+| `answers-grpc.yaml` | gRPC | Generates a gRPC service with tonic |
+
+Both configurations include:
 
 - Multiple entities (Profile, Author, Category, Tag, Article, Comment)
 - All relation types demonstrated:
@@ -13,41 +20,57 @@ The `answers.yaml` file contains all the configuration needed to generate a comp
   - **manyToOne**: Article → Category, Article → Author, Comment → Article
   - **manyToMany**: Article ↔ Tag (via junction table)
 - PostgreSQL database with SeaORM
-- REST API with auto-generated controllers
-- OpenAPI documentation
+- OpenTelemetry integration
+- Helm chart for Kubernetes deployment
 
 ## Prerequisites
 
 - [Rust](https://rustup.rs/) 1.75+ (2024 edition support)
-- [Baker](https://github.com/rogueai/baker) - Template generator
+- [Baker](https://github.com/aliev/baker) - Template generator
+- [protoc](https://grpc.io/docs/protoc-installation/) (for gRPC only)
 
 Install baker:
 
 ```bash
-cargo install baker --locked
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/aliev/baker/releases/latest/download/baker-installer.sh | sh
 ```
 
 ## Usage
 
-### Generate the Sample Project
+### Generate Sample Projects
 
 Using the helper script:
 
 ```bash
 chmod +x generate.sh
-./generate.sh
+
+# Generate both REST and gRPC projects
+./generate.sh all
+
+# Generate only REST project
+./generate.sh rest
+
+# Generate only gRPC project
+./generate.sh grpc
+
+# Specify custom output directory
+./generate.sh all /path/to/output
 ```
 
 Or manually with baker:
 
 ```bash
-baker `.. ./generated --answers answers.yaml
+# REST project
+baker .. ./generated/rest --answers answers-rest.yaml --non-interactive --skip-confirms all
+
+# gRPC project
+baker .. ./generated/grpc --answers answers-grpc.yaml --non-interactive --skip-confirms all
 ```
 
 ### Build and Test
 
 ```bash
-cd generated
+cd generated/rest  # or generated/grpc
 cargo build
 cargo test
 ```
@@ -69,7 +92,7 @@ docker run -d \
 Then run the application:
 
 ```bash
-cd generated
+cd generated/rest
 export DATABASE_URL=postgres://postgres:postgres@localhost:5432/sample_app
 cargo run
 ```
@@ -96,7 +119,7 @@ cargo run
 
 ## Configuration Options
 
-The `answers.yaml` file can be customized to test different template configurations:
+The answer files can be customized to test different template configurations:
 
 | Option | Values | Description |
 |--------|--------|-------------|
@@ -106,15 +129,21 @@ The `answers.yaml` file can be customized to test different template configurati
 | `id_type` | `integer`, `uuid`, `big_integer` | Primary key type |
 | `protocol` | `rest`, `grpc` | API protocol |
 | `features` | `open-telemetry`, `helm` | Optional features |
+| `crudcrate` | `true`, `false` | Use crudcrate for REST (REST only) |
 
 ## CI/CD Integration
 
 This sample is used in the GitHub Actions workflow (`.github/workflows/test.yml`) to:
 
-1. Generate a project from the template
+1. Generate projects from the template (both REST and gRPC via matrix)
 2. Verify the generated code compiles
 3. Run clippy linting
-4. Execute tests
+4. Check code formatting
+5. Execute tests
+6. Build Helm charts
+7. Build Docker images
+
+The workflow runs both protocol variants in parallel using a matrix strategy.
 
 ## License
 
