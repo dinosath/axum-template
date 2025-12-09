@@ -1,0 +1,272 @@
+# Sample answers file for generating a test project from the axum-template
+# This file contains all the answers needed by baker to generate a complete project
+# Usage: baker bake /path/to/axum-template /path/to/output --answers answers.yaml
+#
+# This sample demonstrates ALL relation types:
+# - oneToOne: Author <-> Profile (bidirectional)
+# - oneToMany: Category -> Articles (inverse of manyToOne)
+# - manyToOne: Article -> Category, Article -> Author
+# - manyToMany: Article <-> Tag (bidirectional via junction table)
+
+project_name: sample_app
+project_author: "Template Tester"
+project_version: "0.1.0"
+project_edition: "2021"
+
+# Authentication: none, oidc
+authentication: none
+
+# Database configuration
+database: postgres
+use_sqlx_migrations: false
+db_schema: public
+
+# Primary key type: integer, uuid, big_integer
+id_type: integer
+
+# Available features: open-telemetry, helm
+features:
+  - open-telemetry
+  - helm
+
+# Protocol: rest, grpc
+protocol: rest
+
+# Use crudcrate for REST controller generation
+crudcrate: false
+
+# Static file serving configuration
+static_includes: []
+
+# Entity definitions following Strapi v5 schema format
+# These entities will generate models, controllers, and database migrations
+entities:
+  # Profile entity - demonstrates oneToOne relation (owned side)
+  Profile:
+    kind: collectionType
+    collectionName: profiles
+    priority: 1
+    info:
+      displayName: Profile
+      singularName: profile
+      pluralName: profiles
+      description: Author profile with additional details
+    attributes:
+      avatar_url:
+        type: string
+        required: false
+        maxLength: 500
+      website:
+        type: string
+        required: false
+        maxLength: 255
+      twitter_handle:
+        type: string
+        required: false
+        maxLength: 50
+      github_handle:
+        type: string
+        required: false
+        maxLength: 50
+      location:
+        type: string
+        required: false
+        maxLength: 100
+
+  # Author entity - demonstrates oneToOne relation (owning side)
+  Author:
+    kind: collectionType
+    collectionName: authors
+    priority: 2
+    info:
+      displayName: Author
+      singularName: author
+      pluralName: authors
+      description: Content authors
+    attributes:
+      name:
+        type: string
+        required: true
+        maxLength: 100
+      email:
+        type: string
+        required: true
+        unique: true
+        format: email
+        maxLength: 255
+      bio:
+        type: text
+        required: false
+      # oneToOne relation: Author has one Profile
+      profile:
+        type: relation
+        relation: oneToOne
+        target: Profile
+        required: false
+        inversedBy: author
+
+  # Category entity - demonstrates oneToMany relation
+  Category:
+    kind: collectionType
+    collectionName: categories
+    priority: 1
+    info:
+      displayName: Category
+      singularName: category
+      pluralName: categories
+      description: Categories for organizing articles
+    attributes:
+      name:
+        type: string
+        required: true
+        unique: true
+        maxLength: 100
+      slug:
+        type: string
+        required: true
+        unique: true
+        maxLength: 100
+      description:
+        type: text
+        required: false
+      is_active:
+        type: boolean
+        required: true
+        default: true
+      # oneToMany relation: Category has many Articles
+      articles:
+        type: relation
+        relation: oneToMany
+        target: Article
+        required: false
+        mappedBy: category
+
+  # Tag entity - demonstrates manyToMany relation
+  Tag:
+    kind: collectionType
+    collectionName: tags
+    priority: 1
+    info:
+      displayName: Tag
+      singularName: tag
+      pluralName: tags
+      description: Tags for labeling articles
+    attributes:
+      name:
+        type: string
+        required: true
+        unique: true
+        maxLength: 50
+      color:
+        type: string
+        required: false
+        maxLength: 7
+      # manyToMany relation: Tag has many Articles (inverse side)
+      articles:
+        type: relation
+        relation: manyToMany
+        target: Article
+        required: false
+        mappedBy: tags
+
+  # Article entity - main content entity demonstrating multiple relation types
+  Article:
+    kind: collectionType
+    collectionName: articles
+    priority: 3
+    info:
+      displayName: Article
+      singularName: article
+      pluralName: articles
+      description: Blog articles
+    attributes:
+      title:
+        type: string
+        required: true
+        maxLength: 255
+      slug:
+        type: string
+        required: true
+        unique: true
+        maxLength: 255
+      content:
+        type: text
+        required: true
+      excerpt:
+        type: text
+        required: false
+        maxLength: 500
+      status:
+        type: enumeration
+        required: true
+        enum:
+          - draft
+          - published
+          - archived
+        default: draft
+      published_at:
+        type: datetime
+        required: false
+      view_count:
+        type: integer
+        required: true
+        default: 0
+        minimum: 0
+      is_featured:
+        type: boolean
+        required: true
+        default: false
+      # manyToOne relation: Article belongs to one Category
+      category:
+        type: relation
+        relation: manyToOne
+        target: Category
+        required: true
+        inversedBy: articles
+      # manyToOne relation: Article has one Author
+      author:
+        type: relation
+        relation: manyToOne
+        target: Author
+        required: true
+      # manyToMany relation: Article has many Tags (owning side)
+      tags:
+        type: relation
+        relation: manyToMany
+        target: Tag
+        required: false
+        inversedBy: articles
+
+  # Comment entity - demonstrates another manyToOne relation
+  Comment:
+    kind: collectionType
+    collectionName: comments
+    priority: 4
+    info:
+      displayName: Comment
+      singularName: comment
+      pluralName: comments
+      description: Article comments
+    attributes:
+      content:
+        type: text
+        required: true
+      author_name:
+        type: string
+        required: true
+        maxLength: 100
+      author_email:
+        type: string
+        required: true
+        format: email
+        maxLength: 255
+      is_approved:
+        type: boolean
+        required: true
+        default: false
+      # manyToOne relation: Comment belongs to one Article
+      article:
+        type: relation
+        relation: manyToOne
+        target: Article
+        required: true

@@ -1,0 +1,123 @@
+name: Test Template
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  test-template:
+    name: Test Template Generation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Baker
+        run: cargo install baker --locked
+
+      - name: Generate project from template
+        run: |
+          mkdir -p /tmp/test-output
+          baker bake . /tmp/test-output/generated-app \
+            --set project_name=test_app \
+            --set project_author="Test Author" \
+            --set project_version=0.1.0 \
+            --set project_edition=2021 \
+            --set authentication=none \
+            --set database=postgres \
+            --set use_sqlx_migrations=false \
+            --set db_schema=public \
+            --set id_type=integer \
+            --set protocol=rest \
+            --set crudcrate=false \
+            --set 'features=["open-telemetry"]' \
+            --set 'static_includes=[]' \
+            --set 'entities={}'
+
+      - name: Check generated project compiles
+        working-directory: /tmp/test-output/generated-app
+        run: cargo check
+
+      - name: Run clippy on generated project
+        working-directory: /tmp/test-output/generated-app
+        run: cargo clippy -- -D warnings
+        continue-on-error: true
+
+      - name: Check formatting
+        working-directory: /tmp/test-output/generated-app
+        run: cargo fmt -- --check
+        continue-on-error: true
+
+  test-sample:
+    name: Test Sample Project
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: sample -> target
+
+      - name: Check sample project compiles
+        working-directory: sample
+        run: cargo check
+
+      - name: Run clippy on sample project
+        working-directory: sample
+        run: cargo clippy -- -D warnings
+        continue-on-error: true
+
+      - name: Check formatting
+        working-directory: sample
+        run: cargo fmt -- --check
+        continue-on-error: true
+
+      - name: Run tests
+        working-directory: sample
+        run: cargo test --no-fail-fast
+        continue-on-error: true
+
+  lint-template:
+    name: Lint Template Files
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Baker
+        run: cargo install baker --locked
+
+      - name: Validate baker.yaml
+        run: baker validate .

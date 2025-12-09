@@ -84,6 +84,13 @@ questions:
     default: false
     ask_if: protocol == 'rest'
 
+  ci_cd:
+    multiselect: true
+    default:
+      - github
+    choices:
+      - github
+
   static_includes:
     help: |
       Array of objects mapping URL mount points to relative directories to include & serve statically.

@@ -4,3 +4,5 @@ templates/**
 !templates/helm/**
 macros.jinja
 .idea
+.github
+sample
