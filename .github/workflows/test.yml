@@ -21,10 +21,10 @@ jobs:
       matrix:
         include:
           - protocol: rest
-            answers_file: sample/answers-rest.yaml
+            answers_file: sample/answers-rest.json
             project_name: sample_app
           - protocol: grpc
-            answers_file: sample/answers-grpc.yaml
+            answers_file: sample/answers-grpc.json
             project_name: sample_grpc_app
 
     steps:
