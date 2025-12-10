@@ -37,7 +37,7 @@ jobs:
       - name: Generate project from template
         run: |
           mkdir -p generated
-          baker . ./generated --answers ${{ matrix.answers_file }} --non-interactive --skip-confirms all
+          baker . ./generated --answers ${{ matrix.answers_file }} --force --non-interactive --skip-confirms all
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
