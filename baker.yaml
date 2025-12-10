@@ -85,6 +85,8 @@ questions:
     ask_if: protocol == 'rest'
 
   ci_cd:
+    type: str
+    help: What scripts for CI/CD do you want to generate?
     multiselect: true
     default:
       - github
