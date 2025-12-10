@@ -9,7 +9,7 @@
 #[sea_orm(has_many, via = "{{ macros.m2m_junction_table(entity_name,property) | snake_case }}" )]
 {% elif macros.relation_is_one_to_many(property)=='true' -%}
 #[sea_orm(has_many)]
-{% elif macros.relation_is_many_to_one(property)=='true' -%}
+{% elif macros.relation_is_many_to_one(property)=='true' or macros.relation_is_one_to_one(property)=='true' -%}
 {% filter trim %}
     #[sea_orm(unique)]
     pub {{name | snake_case}}_id: {{ rust_id_type(id_type) }},
