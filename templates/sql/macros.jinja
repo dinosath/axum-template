@@ -44,15 +44,19 @@
 
 {% macro add_foreign_key(name, property, schema_name, id_type) -%}
 {% filter trim -%}
-{%- if macros.is_relation(property)=='true' and macros.relation_is_many_to_one(property)=='true' -%}
+{# manyToOne and oneToOne relations get FK columns #}
+{%- set is_many_to_one = macros.is_relation(property)=='true' and macros.relation_is_many_to_one(property)=='true' -%}
+{%- set is_one_to_one = macros.is_relation(property)=='true' and macros.relation_is_one_to_one(property)=='true' -%}
+{%- set not_null = ' NOT NULL' if property.required else '' -%}
+{%- if is_many_to_one or is_one_to_one -%}
     {% if id_type == 'uuid' -%}
-    {{ name | foreign_key }} UUID,
+    {{ name | foreign_key }} UUID{{ not_null }},
     FOREIGN KEY( {{ name | foreign_key }} ) REFERENCES {{ schema_name }}.{{ macros.get_relation(property) | plural | snake_case }}(id)
     {% elif id_type == 'big_integer' -%}
-    {{ name | foreign_key }} BIGINT,
+    {{ name | foreign_key }} BIGINT{{ not_null }},
     FOREIGN KEY( {{ name | foreign_key }} ) REFERENCES {{ schema_name }}.{{ macros.get_relation(property) | plural | snake_case }}(id)
     {% else -%}
-    {{ name | foreign_key }} INTEGER,
+    {{ name | foreign_key }} INTEGER{{ not_null }},
     FOREIGN KEY( {{ name | foreign_key }} ) REFERENCES {{ schema_name }}.{{ macros.get_relation(property) | plural | snake_case }}(id)
     {% endif -%}
 {% endif -%}

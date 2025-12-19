@@ -5,11 +5,9 @@
     "project_edition": "2021",
     "authentication": "none",
     "database": "postgres",
-    "db_schema": "public",
-    "id_type": "integer",
+    "use_sqlx_migrations": true,
     "features": ["open-telemetry", "helm"],
     "protocol": "rest",
-    "crudcrate": false,
     "static_includes": [],
     "entities": {
         "Profile": {

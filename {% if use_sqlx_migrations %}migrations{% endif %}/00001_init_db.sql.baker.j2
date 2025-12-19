@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS {{ schema_name }}.{{ table_name }} (
     last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP{{',' if attributes | length > 0}}
     {% for name, property in attributes -%}
     {% set type = sql_macros.get_sql_type(name, property, name in entity.required) -%}
-    {%- if macros.is_relation(property)=='true' and macros.relation_is_many_to_one(property)=='true' -%}
+    {%- if macros.is_relation(property)=='true' and (macros.relation_is_many_to_one(property)=='true' or macros.relation_is_one_to_one(property)=='true') -%}
     {{ sql_macros.add_foreign_key(name, property, schema_name, id_type) }}{{',' if loop.nextitem }}
     {% else -%}
     {{ name | snake_case }} {{ type }}{{',' if loop.nextitem }}

@@ -4,6 +4,24 @@ version = "{{project_version}}"
 edition = "2024"
 publish = false
 
+# Faster dev builds - optimize dependencies but not the main crate
+[profile.dev]
+opt-level = 0
+debug = true
+
+[profile.dev.package."*"]
+opt-level = 2
+debug = false
+
+# Faster test builds
+[profile.test]
+opt-level = 0
+debug = true
+
+[profile.test.package."*"]
+opt-level = 2
+debug = false
+
 [profile.release]
 codegen-units = 1
 lto = true
@@ -28,7 +46,7 @@ serde_json = { version = "1.0", default-features = false, features = ["std"] }
 static-serve = "0.4"
 {% endif -%}
 {% if database=='postgres' -%}
-sea-orm = { version = "2.0.0-rc.20", features = ["sqlx-postgres","runtime-tokio-rustls","macros","with-chrono","with-json","with-uuid","schema-sync","entity-registry","rbac"] }
+sea-orm = { version = "2.0.0-rc.21", features = ["sqlx-postgres","runtime-tokio-rustls","macros","with-chrono","with-json","with-uuid","schema-sync","entity-registry","rbac"] }
 {{ 'sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "postgres", "migrate", ]}' if use_sqlx_migrations }}
 {% endif -%}
 utoipa = { version = "5.4", features = ["axum_extras", "uuid", "chrono"] }
@@ -55,3 +73,6 @@ testcontainers-modules = { version = "0.14.0", features = ["postgres"] }
 reqwest = { version = "0.12", features = ["json", "cookies"] }
 tokio-test = "0.4"
 serial_test = "3.2"
+{% if database == 'postgres' and use_sqlx_migrations -%}
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "migrate"] }
+{% endif -%}

@@ -9,10 +9,11 @@
 #[sea_orm(has_many, via = "{{ macros.m2m_junction_table(entity_name,property) | snake_case }}" )]
 {% elif macros.relation_is_one_to_many(property)=='true' -%}
 #[sea_orm(has_many)]
+{# manyToOne or oneToOne = this side has FK column #}
 {% elif macros.relation_is_many_to_one(property)=='true' or macros.relation_is_one_to_one(property)=='true' -%}
 {% filter trim %}
     #[sea_orm(unique)]
-    pub {{name | snake_case}}_id: {{ rust_id_type(id_type) }},
+    pub {{name | snake_case}}_id: {% if not property.required %}Option<{% endif %}{{ rust_id_type(id_type) }}{% if not property.required %}>{% endif %},
     #[sea_orm(belongs_to, from = "{{name | snake_case}}_id", to = "id")]
 {% endfilter %}
 {% endif %}
@@ -44,26 +45,22 @@
         bool
     {%- elif property.type == 'integer' -%}
         {%- if property.minimum and property.minimum >= 0 -%}
-            {%- if property.maximum and property.maximum <= 255 -%}
-                i8
-            {%- elif max is not none and max <= 65535 -%}
+            {%- if property.maximum and property.maximum <= 32767 -%}
                 i16
-            {%- elif max is not none and max <= 4294967295 -%}
+            {%- elif property.maximum and property.maximum <= 2147483647 -%}
                 i32
-            {%- elif max is not none and max <= 9223372036854775807 -%}
+            {%- elif property.maximum and property.maximum <= 9223372036854775807 -%}
                 i64
             {%- else -%}
                 i32
             {%- endif -%}
         {%- else -%}
-            {%- if max is not none and max <= 127 -%}
-                i8
-            {%- elif max is not none and max <= 32767 -%}
+            {%- if property.maximum and property.maximum <= 32767 -%}
                 i16
-            {%- elif max is not none and max <= 2147483647 -%}
+            {%- elif property.maximum and property.maximum <= 2147483647 -%}
                 i32
             {%- else -%}
-                i64
+                i32
             {%- endif -%}
         {%- endif -%}
     {%- elif property.type == 'number' -%}
