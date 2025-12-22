@@ -36,9 +36,11 @@ axum = { version = "0.8", default-features = false, features = ["http1", "tokio"
 axum-oidc = { version = "0.6", default-features = false }
 {% elif authentication=='jwt'-%}
 axum-gate = { version = "1.1", features = ["storage-seaorm-v2"] }
+tracing = "0.1"
+{% endif -%}
+{% if authentication=='jwt' or protocol=='grpc' -%}
 uuid = { version = "1.16", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
-tracing = "0.1"
 {% endif -%}
 anyhow = "1.0"
 env_logger = { version = "0.11", default-features = false, features = ["auto-color", "humantime"] }
@@ -73,7 +75,9 @@ tower-sessions = { version = "0.14", default-features = false, features = ["memo
 [dev-dependencies]
 testcontainers = "0.26"
 testcontainers-modules = { version = "0.14.0", features = ["postgres"] }
+{% if protocol == 'rest' -%}
 reqwest = { version = "0.12", features = ["json", "cookies"] }
+{% endif -%}
 tokio-test = "0.4"
 serial_test = "3.2"
 {% if database == 'postgres' and use_sqlx_migrations -%}

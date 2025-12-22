@@ -1,6 +1,10 @@
 mod app_state;
+{% if protocol=='rest' and crudcrate==false -%}
 mod controllers;
+{% endif -%}
+{% if database=='postgres' -%}
 mod models;
+{% endif -%}
 mod services;
 mod server;
 

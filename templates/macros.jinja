@@ -42,6 +42,7 @@
 {%- endmacro %}
 
 {%- macro is_relation(property) -%}{% if property.type == 'relation' %}true{% else %}false{% endif %}{%- endmacro %}
+{%- macro relation_has_fk(property) -%}{% if property.type == 'relation' and (property.relation == 'manyToOne' or (property.relation == 'oneToOne' and not property.mappedBy)) %}true{% else %}false{% endif %}{%- endmacro %}
 {%- macro relation_cardinality(property) -%}{% if property.type == 'relation' %}{{ property.relation }}{% else %}none{% endif %}{%- endmacro %}
 {%- macro relation_target(property) -%}{% if property.type == 'relation' %}{{ property.target }}{% endif %}{%- endmacro %}
 {%- macro relation_inverse(property) -%}{% if property.type == 'relation' and property.inversedBy %}{{ property.inversedBy }}{% endif %}{%- endmacro %}

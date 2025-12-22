@@ -1,12 +1,18 @@
+{% if protocol=='rest' -%}
 use axum::Router;
+{% else -%}
+use tonic::transport::Server;
+{% endif -%}
 use log::{info, {{ 'error' if use_sqlx_migrations }}};
 {% if database=='postgres' -%}
 use sea_orm::{Database, DatabaseConnection};
 {{ 'use sqlx::postgres::PgPoolOptions;' if use_sqlx_migrations -}}
 {% endif -%}
 use std::{env, error::Error};
+{% if protocol=='rest' -%}
 use tokio::net::TcpListener;
 use crate::app_state::AppState;
+{% endif -%}
 {% if authentication=='jwt'-%}
 use crate::services::auth::setup_auth_state;
 use axum_gate::prelude::{Gate, Role, Group};
@@ -19,6 +25,17 @@ use static_serve::embed_assets;
 embed_assets!("{{ entry.assets_dir }}", compress = true, strip_html_ext = true);
 {% endfor -%}
 {%- endif %}
+{% if protocol=='grpc' -%}
+{% for entity_name,entity in entities | items -%}
+{% if entity.attributes | items %}
+{% set message = entity_name | pascal_case -%}
+use crate::services::{{ project_name | snake_case }}_service::{
+    {{ message }}ServiceImpl,
+    {{ message }}ServiceServer,
+};
+{% endif -%}
+{% endfor -%}
+{% endif -%}
 
 {% if database=='postgres'-%}
 pub async fn init_db() -> Result<DatabaseConnection, Box<dyn std::error::Error>> {
@@ -47,6 +64,7 @@ pub async fn run() -> Result<(), Box<dyn Error>> {
     let port_env = env::var("PORT").unwrap_or_else(|_| "8080".to_string());
     let requested_port: u16 = port_env.parse().unwrap_or(8080);
 
+{% if protocol=='rest' -%}
     let listener = TcpListener::bind(format!("[::]:{}", requested_port)).await?;
     let actual_port = listener.local_addr()?.port();
     info!("Server starting on port {}", actual_port);
@@ -79,5 +97,19 @@ pub async fn run() -> Result<(), Box<dyn Error>> {
         .with_state(state);
 
     axum::serve(listener, app).await?;
+{% else -%}
+    let addr = format!("[::]:{}", requested_port).parse()?;
+    info!("gRPC Server starting on {}", addr);
+
+    Server::builder()
+        {% for entity_name,entity in entities | items -%}
+        {% if entity.attributes | items %}
+        {% set message = entity_name | pascal_case -%}
+        .add_service({{ message }}ServiceServer::new({{ message }}ServiceImpl::new(db.clone())))
+        {% endif -%}
+        {% endfor -%}
+        .serve(addr)
+        .await?;
+{% endif -%}
     Ok(())
 }

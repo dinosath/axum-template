@@ -1,0 +1,10 @@
+pub mod app_state;
+{% if protocol=='rest' and crudcrate==false -%}
+pub mod controllers;
+{% endif -%}
+{% if database=='postgres' -%}
+pub mod models;
+{% endif -%}
+pub mod server;
+pub mod services;
+
