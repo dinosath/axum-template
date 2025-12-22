@@ -1,7 +1,7 @@
 {% import "macros.jinja" as macros -%}
 use tonic::{Request, Response, Status};
 use log::{debug, error};
-use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, IntoActiveModel, ModelTrait, Set};
+use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, IntoActiveModel, ModelTrait, Set, ActiveEnum};
 use crate::services::grpc_utils::find_model_by_id;
 use chrono::Utc;
 
@@ -27,6 +27,11 @@ pub use {{ project_name | snake_case }}_proto::{{ message_snake }}_service_serve
 {% set message_snake = entity_name | snake_case -%}
 {% set message_snake_plural = entity_name | plural | snake_case -%}
 use crate::models::{{ message_snake }}::{ActiveModel as {{ message }}ActiveModel, Entity as {{ message }}Entity, Model as {{ message }}Model};
+{% for attr_name, attr in entity.attributes | items -%}
+{% if attr.enum -%}
+use crate::models::{{ message_snake }}::{{ attr_name | pascal_case }} as {{ message }}{{ attr_name | pascal_case }};
+{% endif -%}
+{% endfor -%}
 {% endif -%}
 {% endfor %}
 {% for entity_name,entity in entities | items -%}
@@ -57,7 +62,6 @@ fn {{ message_snake }}_create_request_to_active_model(req: Create{{ message }}Re
         created_at: Set(now),
         last_updated: Set(now),
         {% for name, property in entity.attributes | items -%}
-        {% if property.enum -%}{% continue %}{% endif -%}
         {% if macros.relation_has_fk(property)=='true' -%}
         {# Relation field with FK - convert string to i32 foreign key #}
         {% if property.required -%}
@@ -67,6 +71,9 @@ fn {{ message_snake }}_create_request_to_active_model(req: Create{{ message }}Re
         {% endif -%}
         {% elif macros.is_relation(property)=='true' -%}
         {# Relation without FK (oneToMany, manyToMany, inverse oneToOne) - skip #}
+        {% elif property.enum -%}
+        {# Enum field - convert string to enum using ActiveEnum::try_from_value #}
+        {{ name | snake_case }}: Set(req.{{ name | snake_case }}.and_then(|s| {{ message }}{{ name | pascal_case }}::try_from_value(&s).ok()).unwrap_or_default()),
         {% elif property.required -%}
         {{ name | snake_case }}: Set(req.{{ name | snake_case }}.unwrap_or_default()),
         {% else -%}
@@ -81,7 +88,6 @@ fn {{ message_snake }}_entity_to_reply(item: {{ message }}Model) -> {{ message }
     {{ message }} {
         id: item.id.to_string(),
         {% for name, property in entity.attributes | items -%}
-        {% if property.enum -%}{% continue %}{% endif -%}
         {% if macros.relation_has_fk(property)=='true' -%}
         {# Relation field with FK - convert i32 foreign key to string #}
         {% if property.required -%}
@@ -91,6 +97,9 @@ fn {{ message_snake }}_entity_to_reply(item: {{ message }}Model) -> {{ message }
         {% endif -%}
         {% elif macros.is_relation(property)=='true' -%}
         {# Relation without FK (oneToMany, manyToMany, inverse oneToOne) - skip #}
+        {% elif property.enum -%}
+        {# Enum field - convert enum to string using into_value #}
+        {{ name | snake_case }}: Some(item.{{ name | snake_case }}.into_value()),
         {% elif property.required -%}
         {{ name | snake_case }}: Some(item.{{ name | snake_case }}),
         {% else -%}
@@ -128,7 +137,6 @@ impl {{ message_snake }}_service_server::{{ message }}Service for {{ message }}S
         let mut active_model = model.into_active_model();
         active_model.last_updated = Set(Utc::now().naive_utc());
         {% for name, property in entity.attributes | items -%}
-        {% if property.enum -%}{% continue %}{% endif -%}
         {% if macros.relation_has_fk(property)=='true' -%}
         {# Relation field with FK - convert string to i32 foreign key #}
         {% if property.required -%}
@@ -138,6 +146,9 @@ impl {{ message_snake }}_service_server::{{ message }}Service for {{ message }}S
         {% endif -%}
         {% elif macros.is_relation(property)=='true' -%}
         {# Relation without FK (oneToMany, manyToMany, inverse oneToOne) - skip #}
+        {% elif property.enum -%}
+        {# Enum field - convert string to enum using ActiveEnum::try_from_value #}
+        active_model.{{ name | snake_case }} = Set(req.{{ name | snake_case }}.and_then(|s| {{ message }}{{ name | pascal_case }}::try_from_value(&s).ok()).unwrap_or_default());
         {% elif property.required -%}
         active_model.{{ name | snake_case }} = Set(req.{{ name | snake_case }}.unwrap_or_default());
         {% else -%}
