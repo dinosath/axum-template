@@ -30,7 +30,7 @@ jobs:
             auth: jwt
           - protocol: grpc
             answers_file: sample/answers-grpc.json
-            project_name: sample_grpc_app
+            project_name: sample-grpc-app
             auth: none
 
     steps:
