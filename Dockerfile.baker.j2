@@ -11,6 +11,10 @@ COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
 
+{% if protocol=='grpc' -%}
+RUN apt-get update && apt-get install -y protobuf-compiler libprotobuf-dev
+{% endif -%}
+
 RUN cargo build --release
 RUN upx --best --lzma /app/target/release/{{project_name}}
 
