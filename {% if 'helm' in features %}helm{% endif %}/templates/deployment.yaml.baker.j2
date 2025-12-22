@@ -16,6 +16,6 @@ spec:
     spec:
       containers:
         - name: {{ project_name }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: "{% raw %}{{ .Values.image.repository }}:{{ .Values.image.tag }}{% endraw %}"
           ports:
-            - containerPort: {{ .Values.service.port }}
+            - containerPort: {% raw %}{{ .Values.service.port }}{% endraw %}
