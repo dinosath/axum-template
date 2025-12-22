@@ -2,7 +2,7 @@
 use axum_gate::{
     cookie_template::CookieTemplate,
     prelude::{Account, Group, JsonWebToken, JwtClaims, Role},
-    repositories::sea_orm::SeaOrmRepository,
+    repositories::memory::{MemoryAccountRepository, MemorySecretRepository},
 };
 {% endif -%}
 {{ 'use sea_orm::DatabaseConnection;' if database=='postgres' }}
@@ -12,9 +12,9 @@ use axum_gate::{
 pub struct AppState {
     {{ 'pub db: DatabaseConnection,' if database=='postgres' }}
     {% if authentication=='jwt' -%}
-    pub account_repository: Arc<SeaOrmRepository>,
-    pub secrets_repository: Arc<SeaOrmRepository>,
+    pub account_repo: Arc<MemoryAccountRepository<Role, Group>>,
+    pub secret_repo: Arc<MemorySecretRepository>,
     pub jwt_codec: Arc<JsonWebToken<JwtClaims<Account<Role, Group>>>>,
-    pub cookie_template :CookieTemplate,
+    pub cookie_template: CookieTemplate,
     {% endif -%}
 }

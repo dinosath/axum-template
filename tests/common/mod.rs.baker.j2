@@ -1,6 +1,6 @@
 {% import "macros.jinja" as macros -%}
 {% import "rust/types.jinja" as rust_types -%}
-{% if authentication == 'keycloak' -%}
+{% if authentication == 'keycloak' or authentication == 'jwt' -%}
 use std::collections::HashMap;
 {% endif -%}
 use std::sync::Arc;
@@ -12,7 +12,7 @@ use testcontainers::{GenericImage, ImageExt};
 use testcontainers_modules::{postgres::Postgres, testcontainers::runners::AsyncRunner};
 {% endif -%}
 use reqwest::{Client, Response};
-{% if authentication == 'keycloak' -%}
+{% if authentication == 'keycloak' or authentication == 'jwt' -%}
 use serde_json::json;
 {% endif -%}
 use tokio::process::{Child, Command};
@@ -151,6 +151,8 @@ struct SharedTestContext {
     keycloak_container: ContainerAsync<GenericImage>,
     keycloak_url: String,
     access_token: String,
+{% elif authentication == 'jwt' -%}
+    access_token: String,
 {% endif -%}
     database_url: String,
     app_url: String,
@@ -214,6 +216,11 @@ impl TestContext {
     }
 
 {% if authentication == 'keycloak' -%}
+    /// Get the authorization header for authenticated requests
+    pub fn get_auth_header(&self) -> String {
+        format!("Bearer {}", self.inner.access_token)
+    }
+{% elif authentication == 'jwt' -%}
     /// Get the authorization header for authenticated requests
     pub fn get_auth_header(&self) -> String {
         format!("Bearer {}", self.inner.access_token)
@@ -317,6 +324,13 @@ impl SharedTestContext {
 {% endif -%}
         ).await;
 
+{% if authentication == 'jwt' -%}
+        // Setup JWT test user after server is running
+        println!("🔧 Setting up JWT test user...");
+        let access_token = Self::setup_jwt_auth(&client, &app_url).await;
+        println!("✅ JWT setup completed");
+{% endif -%}
+
         println!("🎉 Shared test context initialized successfully!");
 
         Self {
@@ -326,6 +340,8 @@ impl SharedTestContext {
 {% if authentication == 'keycloak' -%}
             keycloak_container,
             keycloak_url,
+            access_token,
+{% elif authentication == 'jwt' -%}
             access_token,
 {% endif -%}
             database_url,
@@ -551,6 +567,60 @@ impl SharedTestContext {
         json["access_token"]
             .as_str()
             .expect("No access token in response")
+            .to_string()
+    }
+{% endif -%}
+
+{% if authentication == 'jwt' -%}
+    /// Setup JWT authentication by registering a test user and getting an access token
+    async fn setup_jwt_auth(client: &Client, app_url: &str) -> String {
+        // Register a test user
+        let register_payload = json!({
+            "username": "testuser",
+            "password": "testpass123",
+            "email": "test@example.com"
+        });
+
+        let register_response = client
+            .post(format!("{}/auth/register", app_url))
+            .json(&register_payload)
+            .send()
+            .await;
+
+        // If registration fails (user might already exist), that's okay
+        if let Ok(response) = register_response {
+            let status = response.status();
+            if !status.is_success() && status.as_u16() != 409 {
+                println!("⚠️  Registration returned status: {}", status);
+            }
+        }
+
+        // Login to get access token
+        let login_payload = json!({
+            "username": "testuser",
+            "password": "testpass123"
+        });
+
+        let login_response = client
+            .post(format!("{}/auth/login", app_url))
+            .json(&login_payload)
+            .send()
+            .await
+            .expect("Failed to login test user");
+
+        let status = login_response.status();
+        if !status.is_success() {
+            panic!("Failed to login test user: status {}", status);
+        }
+
+        let json: serde_json::Value = login_response
+            .json()
+            .await
+            .expect("Failed to parse login response");
+
+        json["access_token"]
+            .as_str()
+            .expect("No access_token in login response")
             .to_string()
     }
 {% endif -%}

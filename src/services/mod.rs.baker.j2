@@ -1,2 +1,6 @@
 {{ 'pub mod auth;' if authentication=='jwt' }}
 {{ 'pub mod oidc;' if protocol=='rest' and authentication=='oidc' }}
+{% if 'grpc'==protocol -%}
+pub mod grpc_utils;
+pub mod {{ project_name | snake_case }}_service;
+{% endif -%}

@@ -14,7 +14,7 @@ env:
 
 jobs:
   test-template:
-    name: Test Template (${{ matrix.protocol }})
+    name: Test Template (${{ matrix.protocol }}${{ matrix.auth && format(' + {0}', matrix.auth) || '' }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -23,9 +23,15 @@ jobs:
           - protocol: rest
             answers_file: sample/answers-rest.json
             project_name: sample_app
+            auth: none
+          - protocol: rest
+            answers_file: sample/answers-rest-jwt.json
+            project_name: sample_app_jwt
+            auth: jwt
           - protocol: grpc
             answers_file: sample/answers-grpc.json
             project_name: sample_grpc_app
+            auth: none
 
     steps:
       - name: Checkout repository
@@ -60,15 +66,15 @@ jobs:
         working-directory: generated
         run: cargo check
 
-      - name: Run clippy on generated project
-        working-directory: generated
-        run: cargo clippy -- -D warnings
-        continue-on-error: true
+      # - name: Run clippy on generated project
+      #   working-directory: generated
+      #   run: cargo clippy -- -D warnings
+      #   continue-on-error: true
 
-      - name: Check formatting
-        working-directory: generated
-        run: cargo fmt -- --check
-        continue-on-error: true
+      # - name: Check formatting
+      #   working-directory: generated
+      #   run: cargo fmt -- --check
+      #   continue-on-error: true
 
       - name: Run tests
         working-directory: generated

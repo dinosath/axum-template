@@ -8,37 +8,48 @@ use serde_json::json;
 use serial_test::serial;
 
 {# Check if entity has required manyToOne or oneToOne relations #}
-{% set ns = namespace(has_required_relations=false) -%}
+{% set ns = namespace(has_required_relations=false, has_required_fields=false) -%}
 {% for name, property in entity.attributes | items -%}
 {% if property.type == 'relation' and property.required and (property.relation == 'manyToOne' or property.relation == 'oneToOne') -%}
 {% set ns.has_required_relations = true -%}
 {% endif -%}
+{% if property.required and not property.readOnly and property.type != 'relation' -%}
+{% set ns.has_required_fields = true -%}
+{% endif -%}
 {% endfor -%}
+
 {% if ns.has_required_relations -%}
 /// Helper to create required related entities before the main entity
 async fn setup_required_relations(ctx: &TestContext) -> serde_json::Map<String, serde_json::Value> {
     let mut relation_ids = serde_json::Map::new();
+
+{# First pass: Create all nested leaf entities (entities that the parent relations depend on) #}
 {% for name, property in entity.attributes | items -%}
-{% if property.type == 'relation' and property.required and (property.relation == 'manyToOne' or property.relation == 'oneToOne') %}
-    // Create required {{ property.target }}
-    let {{ property.target | snake_case }}_payload = json!({
-{% if entities[property.target] and entities[property.target].attributes -%}
-{% for attr_name, attr_prop in entities[property.target].attributes | items -%}
+{% if property.type == 'relation' and property.required and (property.relation == 'manyToOne' or property.relation == 'oneToOne') -%}
+{% set target_entity = entities[property.target] -%}
+{% if target_entity and target_entity.attributes -%}
+{% for nested_name, nested_prop in target_entity.attributes | items -%}
+{% if nested_prop.type == 'relation' and nested_prop.required and (nested_prop.relation == 'manyToOne' or nested_prop.relation == 'oneToOne') -%}
+{% set nested_target = entities[nested_prop.target] -%}
+    // Create {{ nested_prop.target }} (required by {{ property.target }})
+    let {{ nested_prop.target | snake_case }}_for_{{ property.target | snake_case }}_payload = json!({
+{% if nested_target and nested_target.attributes -%}
+{% for attr_name, attr_prop in nested_target.attributes | items -%}
 {% if not attr_prop.readOnly and attr_prop.type != 'relation' -%}
 {% if attr_prop.type == 'string' -%}
 {% if attr_prop.format == 'email' -%}
-        "{{ attr_name | snake_case }}": "{{ property.target | snake_case }}_test@example.com"{% if not loop.last %},{% endif %}
+        "{{ attr_name | snake_case }}": "{{ nested_prop.target | snake_case }}_for_{{ property.target | snake_case }}_test@example.com",
 {% else -%}
-        "{{ attr_name | snake_case }}": "Test {{ property.target }} {{ attr_name | title }}"{% if not loop.last %},{% endif %}
+        "{{ attr_name | snake_case }}": "Test {{ nested_prop.target }} {{ attr_name | title }}",
 {% endif -%}
 {% elif attr_prop.type == 'integer' -%}
-        "{{ attr_name | snake_case }}": {{ attr_prop.default | default(1) }}{% if not loop.last %},{% endif %}
+        "{{ attr_name | snake_case }}": {{ attr_prop.default | default(1) }},
 {% elif attr_prop.type == 'boolean' -%}
-        "{{ attr_name | snake_case }}": {{ attr_prop.default | default('true') | lower }}{% if not loop.last %},{% endif %}
+        "{{ attr_name | snake_case }}": {{ attr_prop.default | default('true') | lower }},
 {% elif attr_prop.type == 'text' -%}
-        "{{ attr_name | snake_case }}": "Test {{ attr_name | title }} content"{% if not loop.last %},{% endif %}
+        "{{ attr_name | snake_case }}": "Test {{ attr_name | title }} content",
 {% elif attr_prop.type == 'enumeration' or attr_prop.enum -%}
-        "{{ attr_name | snake_case }}": "{{ attr_prop.enum[0] | default('default') | pascal_case }}"{% if not loop.last %},{% endif %}
+        "{{ attr_name | snake_case }}": "{{ attr_prop.enum[0] | default('default') | pascal_case }}",
 {% endif -%}
 {% endif -%}
 {% endfor -%}
@@ -47,7 +58,93 @@ async fn setup_required_relations(ctx: &TestContext) -> serde_json::Map<String, 
 
     let response = ctx
         .client()
-        .post(&format!("{}/api/{{ entities[property.target].info.pluralName | default(property.target | plural | snake_case) }}", ctx.base_url()))
+        .post(&format!("{}/api/{{ nested_target.info.pluralName | default(nested_prop.target | plural | snake_case) }}", ctx.base_url()))
+{% if authentication != 'none' -%}
+        .header("Authorization", ctx.get_auth_header())
+{% endif -%}
+        .json(&{{ nested_prop.target | snake_case }}_for_{{ property.target | snake_case }}_payload)
+        .send()
+        .await
+        .expect("Failed to send request to create {{ nested_prop.target }}");
+
+    let status = response.status();
+    let body_text = response.text().await.expect("Failed to read {{ nested_prop.target }} response body");
+    
+    if !status.is_success() {
+        panic!(
+            "Failed to create {{ nested_prop.target }} (status {}): {}\nPayload: {}",
+            status,
+            body_text,
+            serde_json::to_string_pretty(&{{ nested_prop.target | snake_case }}_for_{{ property.target | snake_case }}_payload).unwrap()
+        );
+    }
+    
+    let created: serde_json::Value = serde_json::from_str(&body_text)
+        .expect("Failed to parse {{ nested_prop.target }} response as JSON");
+    relation_ids.insert("{{ nested_name | snake_case }}_for_{{ property.target | snake_case }}_id".to_string(), created["id"].clone());
+
+{% endif -%}
+{% endfor -%}
+{% endif -%}
+{% endif -%}
+{% endfor %}
+{# Second pass: Create the direct parent entities with their nested relations #}
+{% for name, property in entity.attributes | items -%}
+{% if property.type == 'relation' and property.required and (property.relation == 'manyToOne' or property.relation == 'oneToOne') -%}
+{% set target_entity = entities[property.target] -%}
+{# Check if target entity has required nested relations #}
+{% set target_has_nested = namespace(value=false) -%}
+{% if target_entity and target_entity.attributes -%}
+{% for nested_name, nested_prop in target_entity.attributes | items -%}
+{% if nested_prop.type == 'relation' and nested_prop.required and (nested_prop.relation == 'manyToOne' or nested_prop.relation == 'oneToOne') -%}
+{% set target_has_nested.value = true -%}
+{% endif -%}
+{% endfor -%}
+{% endif -%}
+    // Create required {{ property.target }}
+{% if target_has_nested.value %}
+    let mut {{ property.target | snake_case }}_payload = json!({
+{% else %}
+    let {{ property.target | snake_case }}_payload = json!({
+{% endif %}
+{% if target_entity and target_entity.attributes -%}
+{% for attr_name, attr_prop in target_entity.attributes | items -%}
+{% if not attr_prop.readOnly and attr_prop.type != 'relation' -%}
+{% if attr_prop.type == 'string' -%}
+{% if attr_prop.format == 'email' -%}
+        "{{ attr_name | snake_case }}": "{{ property.target | snake_case }}_test@example.com",
+{% else -%}
+        "{{ attr_name | snake_case }}": "Test {{ property.target }} {{ attr_name | title }}",
+{% endif -%}
+{% elif attr_prop.type == 'integer' -%}
+        "{{ attr_name | snake_case }}": {{ attr_prop.default | default(1) }},
+{% elif attr_prop.type == 'boolean' -%}
+        "{{ attr_name | snake_case }}": {{ attr_prop.default | default('true') | lower }},
+{% elif attr_prop.type == 'text' -%}
+        "{{ attr_name | snake_case }}": "Test {{ attr_name | title }} content",
+{% elif attr_prop.type == 'enumeration' or attr_prop.enum -%}
+        "{{ attr_name | snake_case }}": "{{ attr_prop.enum[0] | default('default') | pascal_case }}",
+{% endif -%}
+{% endif -%}
+{% endfor -%}
+{% endif %}
+    });
+{% if target_has_nested.value %}
+    // Add nested required relations to {{ property.target }}
+{% if target_entity and target_entity.attributes -%}
+{% for nested_name, nested_prop in target_entity.attributes | items -%}
+{% if nested_prop.type == 'relation' and nested_prop.required and (nested_prop.relation == 'manyToOne' or nested_prop.relation == 'oneToOne') -%}
+    if let Some(id) = relation_ids.get("{{ nested_name | snake_case }}_for_{{ property.target | snake_case }}_id") {
+        {{ property.target | snake_case }}_payload["{{ nested_name | snake_case }}"] = json!({ "id": id.clone() });
+    }
+{% endif -%}
+{% endfor -%}
+{% endif -%}
+{% endif %}
+
+    let response = ctx
+        .client()
+        .post(&format!("{}/api/{{ target_entity.info.pluralName | default(property.target | plural | snake_case) }}", ctx.base_url()))
 {% if authentication != 'none' -%}
         .header("Authorization", ctx.get_auth_header())
 {% endif -%}
@@ -71,6 +168,7 @@ async fn setup_required_relations(ctx: &TestContext) -> serde_json::Map<String, 
     let created: serde_json::Value = serde_json::from_str(&body_text)
         .expect("Failed to parse {{ property.target }} response as JSON");
     relation_ids.insert("{{ name | snake_case }}_id".to_string(), created["id"].clone());
+
 {% endif -%}
 {% endfor %}
     relation_ids
@@ -78,6 +176,7 @@ async fn setup_required_relations(ctx: &TestContext) -> serde_json::Map<String, 
 
 /// Helper to cleanup required related entities after test
 async fn cleanup_required_relations(ctx: &TestContext, relation_ids: &serde_json::Map<String, serde_json::Value>) {
+{# Clean up main relations first #}
 {% for name, property in entity.attributes | items -%}
 {% if property.type == 'relation' and property.required and (property.relation == 'manyToOne' or property.relation == 'oneToOne') %}
     if let Some(id) = relation_ids.get("{{ name | snake_case }}_id") {
@@ -90,6 +189,29 @@ async fn cleanup_required_relations(ctx: &TestContext, relation_ids: &serde_json
             .send()
             .await;
     }
+{% endif -%}
+{% endfor %}
+{# Clean up nested relations #}
+{% for name, property in entity.attributes | items -%}
+{% if property.type == 'relation' and property.required and (property.relation == 'manyToOne' or property.relation == 'oneToOne') -%}
+{% set target_entity = entities[property.target] -%}
+{% if target_entity and target_entity.attributes -%}
+{% for nested_name, nested_prop in target_entity.attributes | items -%}
+{% if nested_prop.type == 'relation' and nested_prop.required and (nested_prop.relation == 'manyToOne' or nested_prop.relation == 'oneToOne') -%}
+{% set nested_target = entities[nested_prop.target] -%}
+    if let Some(id) = relation_ids.get("{{ nested_name | snake_case }}_for_{{ property.target | snake_case }}_id") {
+        let _ = ctx
+            .client()
+            .delete(&format!("{}/api/{{ nested_target.info.pluralName | default(nested_prop.target | plural | snake_case) }}/{}", ctx.base_url(), id))
+{% if authentication != 'none' -%}
+            .header("Authorization", ctx.get_auth_header())
+{% endif -%}
+            .send()
+            .await;
+    }
+{% endif -%}
+{% endfor -%}
+{% endif -%}
 {% endif -%}
 {% endfor %}
 }
@@ -367,6 +489,7 @@ async fn test_{{ entity_name | snake_case }}_crud_operations() {
 {% endif -%}
 }
 
+{% if ns.has_required_fields or ns.has_required_relations -%}
 #[tokio::test]
 #[serial]
 async fn test_{{ entity_name | snake_case }}_validation() {
@@ -390,6 +513,7 @@ async fn test_{{ entity_name | snake_case }}_validation() {
     let (details, _) = ResponseDetails::capture(response, Some(&invalid_payload)).await;
     assert_client_error!(details, "Expected client error for invalid payload");
 }
+{% endif -%}
 
 #[tokio::test]
 #[serial]

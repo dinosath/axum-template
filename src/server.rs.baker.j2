@@ -9,6 +9,8 @@ use tokio::net::TcpListener;
 use crate::app_state::AppState;
 {% if authentication=='jwt'-%}
 use crate::services::auth::setup_auth_state;
+use axum_gate::prelude::{Gate, Role, Group};
+use std::sync::Arc;
 {% endif -%}
 {% if static_includes | length > 0 -%}
 use static_serve::embed_assets;
@@ -39,7 +41,7 @@ pub async fn run() -> Result<(), Box<dyn Error>> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     {% if database=='postgres'-%}
-    let db= init_db().await?;
+    let db = init_db().await?;
     {% endif -%}
 
     let port_env = env::var("PORT").unwrap_or_else(|_| "8080".to_string());
@@ -50,21 +52,30 @@ pub async fn run() -> Result<(), Box<dyn Error>> {
     info!("Server starting on port {}", actual_port);
 
     {% if authentication=='jwt' -%}
-    let (auth_state) = setup_auth_state(&&db).await;
+    let auth_state = setup_auth_state().await;
     {% endif -%}
     let state = AppState {
         {{- 'db,' if database=='postgres' -}}
         {% if authentication=='jwt' -%}
-        account_repository: auth_state.account_repository,
-        secrets_repository: auth_state.secrets_repository,
+        account_repo: auth_state.account_repo,
+        secret_repo: auth_state.secret_repo,
         jwt_codec: auth_state.jwt_codec,
         cookie_template: auth_state.cookie_template,
         {% endif -%}
     };
     let app = Router::new()
         {{ '.merge(static_router())' if static_includes | length > 0 }}
-        {{ '.nest("/auth", crate::services::auth::auth_routes())' if protocol=='rest' and authentication=='oidc' }}
+        {{ '.nest("/auth", crate::services::auth::auth_routes())' if protocol=='rest' and authentication=='jwt' }}
+        {{ '.nest("/auth", crate::services::oidc::auth_routes())' if protocol=='rest' and authentication=='oidc' }}
+        {% if authentication=='jwt' -%}
+        .nest("/api", crate::controllers::routes()
+            .layer(
+                Gate::bearer::<_, Role, Group>("{{ project_name }}", Arc::clone(&state.jwt_codec))
+                    .require_login()
+            ))
+        {% else -%}
         .nest("/api", crate::controllers::routes())
+        {% endif -%}
         .with_state(state);
 
     axum::serve(listener, app).await?;

@@ -3,6 +3,12 @@ import_root: "templates"
 template_globs:
   - "**/*.jinja"
   - "*.jinja"
+exclude_globs:
+  - "generated/**"
+  - "generated-*/**"
+  - "sample/**"
+  - ".git/**"
+  - "target/**"
 
 questions:
   project_name:
@@ -27,8 +33,9 @@ questions:
   authentication:
     type: str
     help: What authentication method do you want to use?
-    default: oidc
+    default: none
     choices:
+      - jwt
       - oidc
       - none
 

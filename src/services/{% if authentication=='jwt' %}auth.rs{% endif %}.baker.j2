@@ -1,0 +1,277 @@
+use axum::{
+    extract::{Json, State},
+    http::{header, StatusCode},
+    response::IntoResponse,
+    routing::{get, post},
+    Router,
+};
+use axum_gate::{
+    accounts::{AccountInsertService, AccountRepository},
+    codecs::Codec,
+    cookie_template::CookieTemplate,
+    credentials::{Credentials, CredentialsVerifier},
+    prelude::*,
+    repositories::memory::{MemoryAccountRepository, MemorySecretRepository},
+    verification_result::VerificationResult,
+    jsonwebtoken,
+};
+use chrono::{TimeDelta, Utc};
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tracing::{debug, info};
+
+use crate::app_state::AppState;
+
+/// Request payload for user login
+#[derive(Debug, Deserialize)]
+pub struct LoginRequest {
+    pub username: String,
+    pub password: String,
+}
+
+/// Request payload for user registration
+#[derive(Debug, Deserialize)]
+pub struct RegisterRequest {
+    pub username: String,
+    pub password: String,
+    pub email: Option<String>,
+}
+
+/// Response for successful authentication
+#[derive(Debug, Serialize)]
+pub struct AuthResponse {
+    pub access_token: String,
+    pub token_type: String,
+    pub expires_in: i64,
+}
+
+/// Response for user info
+#[derive(Debug, Serialize)]
+pub struct UserInfo {
+    pub user_id: String,
+    pub roles: Vec<String>,
+    pub groups: Vec<String>,
+}
+
+/// Health check endpoint
+pub async fn health() -> impl IntoResponse {
+    Json(serde_json::json!({ "status": "ok" }))
+}
+
+/// Login endpoint - authenticates user and returns JWT token
+pub async fn login(
+    State(state): State<AppState>,
+    Json(payload): Json<LoginRequest>,
+) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    // Find the account by user_id (username is user_id in our case)
+    let account = state
+        .account_repo
+        .query_account_by_user_id(&payload.username)
+        .await
+        .map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": "Internal server error" })),
+            )
+        })?
+        .ok_or_else(|| {
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({ "error": "Invalid credentials" })),
+            )
+        })?;
+
+    // Verify credentials using axum-gate's verification
+    let credentials = Credentials::new(&account.account_id, &payload.password);
+    let verification = state
+        .secret_repo
+        .verify_credentials(credentials)
+        .await
+        .map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": "Internal server error" })),
+            )
+        })?;
+
+    if verification != VerificationResult::Ok {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({ "error": "Invalid credentials" })),
+        ));
+    }
+
+    // Generate JWT token
+    let expires_in = 3600 * 24 * 7; // 7 days
+    let registered_claims = RegisteredClaims::new(
+        "{{ project_name }}",
+        (Utc::now() + TimeDelta::seconds(expires_in)).timestamp() as u64,
+    );
+
+    let jwt_claims = JwtClaims {
+        registered_claims,
+        custom_claims: account.clone(),
+    };
+
+    let token = state
+        .jwt_codec
+        .encode(&jwt_claims)
+        .map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": "Failed to generate token" })),
+            )
+        })?;
+
+    Ok(Json(AuthResponse {
+        access_token: String::from_utf8(token).map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": "Failed to encode token" })),
+            )
+        })?,
+        token_type: "Bearer".to_string(),
+        expires_in,
+    }))
+}
+
+/// Register a new user
+pub async fn register(
+    State(state): State<AppState>,
+    Json(payload): Json<RegisterRequest>,
+) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    // Check if user already exists
+    if let Ok(Some(_)) = state
+        .account_repo
+        .query_account_by_user_id(&payload.username)
+        .await
+    {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({ "error": "Username already exists" })),
+        ));
+    }
+
+    // Create account using AccountInsertService
+    let account = AccountInsertService::insert(&payload.username, &payload.password)
+        .with_roles(vec![Role::User])
+        .with_groups(vec![])
+        .into_repositories(
+            Arc::clone(&state.account_repo),
+            Arc::clone(&state.secret_repo),
+        )
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": format!("Failed to create account: {}", e) })),
+            )
+        })?
+        .ok_or_else(|| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": "Failed to create account" })),
+            )
+        })?;
+
+    info!("New user registered: {}", payload.username);
+
+    Ok((
+        StatusCode::CREATED,
+        Json(serde_json::json!({
+            "message": "User registered successfully",
+            "user_id": account.user_id
+        })),
+    ))
+}
+
+/// Get current user info from JWT token
+pub async fn me(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    let auth_header = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .ok_or_else(|| {
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({ "error": "Missing authorization header" })),
+            )
+        })?;
+
+    let token = auth_header
+        .strip_prefix("Bearer ")
+        .ok_or_else(|| {
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({ "error": "Invalid authorization header format" })),
+            )
+        })?;
+
+    let claims: JwtClaims<Account<Role, Group>> = state.jwt_codec.decode(token.as_bytes()).map_err(|_| {
+        (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({ "error": "Invalid or expired token" })),
+        )
+    })?;
+
+    let account = claims.custom_claims;
+    Ok(Json(UserInfo {
+        user_id: account.user_id,
+        roles: account.roles.iter().map(|r| format!("{:?}", r)).collect(),
+        groups: account.groups.iter().map(|g| g.name().to_string()).collect(),
+    }))
+}
+
+/// Initialize authentication state components
+pub struct AuthState {
+    pub account_repo: Arc<MemoryAccountRepository<Role, Group>>,
+    pub secret_repo: Arc<MemorySecretRepository>,
+    pub jwt_codec: Arc<JsonWebToken<JwtClaims<Account<Role, Group>>>>,
+    pub cookie_template: CookieTemplate,
+}
+
+pub async fn setup_auth_state() -> AuthState {
+    let shared_secret = dotenvy::var("JWT_SECRET")
+        .unwrap_or_else(|_| "super-secret-key-change-in-production".to_string());
+
+    let jwt_options = JsonWebTokenOptions {
+        enc_key: jsonwebtoken::EncodingKey::from_secret(shared_secret.as_bytes()),
+        dec_key: jsonwebtoken::DecodingKey::from_secret(shared_secret.as_bytes()),
+        header: Some(jsonwebtoken::Header::default()),
+        validation: Some(jsonwebtoken::Validation::default()),
+    };
+
+    let jwt_codec = Arc::new(
+        JsonWebToken::<JwtClaims<Account<Role, Group>>>::new_with_options(jwt_options),
+    );
+
+    let account_repo = Arc::new(MemoryAccountRepository::<Role, Group>::default());
+    debug!("Account repository initialized");
+
+    let secret_repo = Arc::new(
+        MemorySecretRepository::new_with_argon2_hasher()
+            .expect("Failed to create secret repository"),
+    );
+    debug!("Secrets repository initialized");
+
+    let cookie_template = CookieTemplate::recommended();
+
+    AuthState {
+        account_repo,
+        secret_repo,
+        jwt_codec,
+        cookie_template,
+    }
+}
+
+/// Auth routes for nesting under `/auth`
+/// Usage in server: .nest("/auth", crate::services::auth::auth_routes())
+pub fn auth_routes() -> Router<AppState> {
+    Router::new()
+        .route("/health", get(health))
+        .route("/login", post(login))
+        .route("/register", post(register))
+        .route("/me", get(me))
+}
