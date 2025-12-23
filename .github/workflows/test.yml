@@ -50,12 +50,6 @@ jobs:
         with:
           components: rustfmt, clippy
 
-      - name: Install protoc (for gRPC)
-        if: matrix.protocol == 'grpc'
-        uses: arduino/setup-protoc@v3
-        with:
-          version: "25.x"
-
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
         with:
