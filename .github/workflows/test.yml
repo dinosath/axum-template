@@ -14,7 +14,7 @@ env:
 
 jobs:
   test-template:
-    name: Test Template (${{ matrix.protocol }}${{ matrix.auth && format(' + {0}', matrix.auth) || '' }})
+    name: Test Template (${{ matrix.protocol }}${{ matrix.auth != 'none' && format(' + {0}', matrix.auth) || '' }}${{ matrix.frontend != 'none' && format(' + {0}', matrix.frontend) || '' }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -34,10 +34,12 @@ jobs:
             answers_file: sample/answers-rest-jwt.json
             project_name: sample-app-jwt
             auth: jwt
+            frontend: none
           - protocol: grpc
             answers_file: sample/answers-grpc.json
             project_name: sample-grpc-app
             auth: none
+            frontend: none
 
     steps:
       - name: Checkout repository
@@ -64,10 +66,10 @@ jobs:
           version: 10
       - run: pnpm install
         if: matrix.frontend != 'none'
-        working-directory: generated
+        working-directory: generated/frontend
       - run: pnpm run build
         if: matrix.frontend != 'none'
-        working-directory: generated
+        working-directory: generated/frontend
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
         with:
