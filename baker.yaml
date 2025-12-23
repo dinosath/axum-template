@@ -100,37 +100,6 @@ questions:
     choices:
       - github
 
-  static_includes:
-    help: |
-      Array of objects mapping URL mount points to relative directories to include & serve statically.
-      Each object must have:
-        - route: URL path prefix (e.g. /assets)
-        - assets_dir: relative directory path (e.g. frontend/dist)
-      Example: [{"route": "/assets", "assets_dir": "frontend/dist"}]
-    type: json
-    schema: |
-      {
-        "type": "array",
-        "items": {
-          "type": "object",
-          "required": ["route", "assets_dir"],
-          "additionalProperties": false,
-          "properties": {
-            "route": {
-              "type": "string",
-              "pattern": "^/.*$",
-              "description": "Mount point URL path (must start with /)"
-            },
-            "assets_dir": {
-              "type": "string",
-              "description": "Relative directory path to include"
-            }
-          }
-        }
-      }
-    default: |
-      []
-
   entities:
     type: json
     help: Configure your entities

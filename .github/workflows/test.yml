@@ -24,6 +24,12 @@ jobs:
             answers_file: sample/answers-rest.json
             project_name: sample-app
             auth: none
+            frontend: none
+          - protocol: rest
+            answers_file: sample/answers-rest-shadcn.json
+            project_name: sample-app
+            auth: none
+            frontend: shadcn-admin-kit
           - protocol: rest
             answers_file: sample/answers-rest-jwt.json
             project_name: sample-app-jwt
@@ -36,6 +42,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          submodules: true
 
       - name: Install Baker
         run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/aliev/baker/releases/latest/download/baker-installer.sh | sh
@@ -50,6 +58,16 @@ jobs:
         with:
           components: rustfmt, clippy
 
+      - uses: pnpm/action-setup@v4
+        if: matrix.frontend != 'none'
+        with:
+          version: 10
+      - run: pnpm install
+        if: matrix.frontend != 'none'
+        working-directory: generated
+      - run: pnpm run build
+        if: matrix.frontend != 'none'
+        working-directory: generated
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
         with:

@@ -18,12 +18,10 @@ use crate::services::auth::setup_auth_state;
 use axum_gate::prelude::{Gate, Role, Group};
 use std::sync::Arc;
 {% endif -%}
-{% if static_includes | length > 0 -%}
+{% if frontend!='none' -%}
 use static_serve::embed_assets;
 
-{% for entry in static_includes -%}
-embed_assets!("{{ entry.assets_dir }}", compress = true, strip_html_ext = true);
-{% endfor -%}
+embed_assets!("frontend/dist", compress = true, strip_html_ext = true);
 {%- endif %}
 {% if protocol=='grpc' -%}
 {% for entity_name,entity in entities | items -%}
@@ -82,7 +80,7 @@ pub async fn run() -> Result<(), Box<dyn Error>> {
         {% endif -%}
     };
     let app = Router::new()
-        {{ '.merge(static_router())' if static_includes | length > 0 }}
+        {{ '.merge(static_router())' if frontend!='none' }}
         {{ '.nest("/auth", crate::services::auth::auth_routes())' if protocol=='rest' and authentication=='jwt' }}
         {{ '.nest("/auth", crate::services::oidc::auth_routes())' if protocol=='rest' and authentication=='oidc' }}
         {% if authentication=='jwt' -%}
