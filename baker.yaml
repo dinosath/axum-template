@@ -85,6 +85,14 @@ questions:
       - rest
       - grpc
 
+  frontend:
+    type: str
+    help: What frontend do you want to generate?
+    default: none
+    choices:
+      - shadcn-admin-kit
+      - none
+
   crudcrate:
     type: bool
     help: Do you want to use crudcrate for generation of rest controllers?
