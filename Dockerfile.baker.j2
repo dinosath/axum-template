@@ -6,20 +6,8 @@ FROM chef AS planner
 COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
 
-FROM chef AS builder
-COPY --from=planner /app/recipe.json recipe.json
-RUN cargo chef cook --release --recipe-path recipe.json
-COPY . .
-
-{% if protocol=='grpc' -%}
-RUN apt-get update && apt-get install -y protobuf-compiler libprotobuf-dev
-{% endif -%}
-
-RUN cargo build --release
-RUN upx --best --lzma /app/target/release/{{project_name}}
-
-{% if serve_static_content -%}
-FROM node:20-slim AS node
+{% if frontend!='none' -%}
+FROM node:24-slim AS node
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
@@ -30,11 +18,23 @@ RUN pnpm install
 RUN pnpm build
 {% endif %}
 
-FROM gcr.io/distroless/static-debian12
-COPY --from=builder /app/target/release/{{project_name}} /
-{% if serve_static_content -%}
-COPY --from=node /app/dist /app/static
+FROM chef AS builder
+COPY --from=planner /app/recipe.json recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json
+COPY . .
+
+{% if protocol=='grpc' -%}
+RUN apt-get update && apt-get install -y protobuf-compiler libprotobuf-dev
+{% endif -%}
+
+{% if frontend!='none' -%}
+COPY --from=node /app/dist /app/frontend/dist
 {% endif %}
+RUN cargo build --release
+RUN upx --best --lzma /app/target/release/{{project_name}}
+
+FROM dhi.io/static:20250419 AS runtime
+COPY --from=builder /app/target/release/{{project_name}} /
 
 EXPOSE 8080
 
