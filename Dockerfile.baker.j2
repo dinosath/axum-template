@@ -24,7 +24,7 @@ RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
 
 {% if protocol=='grpc' -%}
-RUN apt-get update && apt-get install -y protobuf-compiler libprotobuf-dev
+RUN apk add --no-cache protobuf-dev protoc
 {% endif -%}
 
 {% if frontend!='none' -%}
