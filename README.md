@@ -305,14 +305,39 @@ Macros added in `macros.jinja`:
 
 The template includes a `Dockerfile` optimized for multi-architecture builds using `cargo-chef`:
 
+### 🔒 Security-First: Hardened Docker Images
+
+This template uses **hardened base images** to ensure maximum security in production environments:
+
+#### Why Hardened Images?
+
+| Aspect | Traditional Images | Docker Hardened Images |
+|--------|-------------------|---------------------------|
+| **CVEs** | Often 100+ vulnerabilities | **Zero known CVEs** |
+| **Attack Surface** | Shell, package managers, utilities | **No shell, minimal binaries** |
+| **Image Size** | 50-500+ MB | **< 5 MB** |
+| **Compliance** | Manual hardening required | **SLSA Level 2, SBOM included** |
+
+> ⚠️ **Security Best Practice**: Always use hardened, distroless images in production. The docker hardened images static image contains only the absolute minimum required to run a statically-linked binary—no shell, no package manager, no attack surface.
+
+### 📦 Ultra-Small Image Size: < 5 MB
+
+The final production image is **less than 5 MB** thanks to:
+
+- **Static linking with musl**: No runtime dependencies required
+- **Distroless base image**: Only contains the binary, CA certificates, and timezone data
+- **LTO (Link-Time Optimization)**: Maximum binary size reduction
+- **Binary stripping**: Debug symbols removed
+- **UPX compression** (optional): Can further reduce to ~2 MB
+
 ### Benefits
 
-- **Multi-architecture support**: Build for `linux/amd64` and `linux/arm64`
-- **Fast builds**: `cargo-chef` caches dependencies separately from source code
-- **Reproducible builds**: `--locked` flag ensures consistent dependency versions
-- **Optimized images**: Multi-stage build with minimal runtime image
-- **Compression**: Binary is stripped and uses LTO (Link-Time Optimization) for maximum compression
-- **Small image size**: Final multiarch image is approximately 5 MB
+- **🔒 Hardened security**: Zero CVE base images with minimal attack surface
+- **📦 Tiny footprint**: Final image under 5 MB—fast pulls, low storage costs
+- **🌍 Multi-architecture support**: Build for `linux/amd64` and `linux/arm64`
+- **⚡ Fast builds**: `cargo-chef` caches dependencies separately from source code
+- **🔄 Reproducible builds**: `--locked` flag ensures consistent dependency versions
+- **🗜️ Maximum compression**: LTO + stripping for the smallest possible binary
 
 ### Building Locally
 
@@ -329,13 +354,15 @@ docker buildx build --platform linux/amd64,linux/arm64 -t my-app:latest --push .
 1. **Chef stage**: Installs `cargo-chef` for dependency caching
 2. **Planner stage**: Analyzes dependencies to create a recipe
 3. **Builder stage**: Builds dependencies (cached), then builds your application
-4. **Runtime stage**: Minimal Alpine image with just the binary
+4. **Runtime stage**: Docker hardened images with just the binary
 
 ## Features
 - Rust backend powered by axum
 - Database support for postgres via sea-orm
+- **🔒 Hardened Docker images** with zero CVEs
+- **📦 Ultra-small images** (< 5 MB) using distroless runtime
 - Docker multi-architecture support (amd64, arm64) with cargo-chef
-- Compressed, optimized images (~5 MB) using LTO and binary stripping
+- Compressed, optimized binaries using LTO and stripping
 - OpenAPI documentation with interactive UI (utoipa + Scalar)
 - Flexible code generation via baker
 - Generate either a minimal project or a full CRUD app based on your entity definitions
