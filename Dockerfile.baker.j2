@@ -30,7 +30,6 @@ RUN apk add --no-cache protobuf-dev protoc
 {% if frontend!='none' -%}
 COPY --from=node /app/dist /app/frontend/dist
 {% endif %}
-RUN cargo test
 RUN cargo build --release
 RUN upx --best --lzma /app/target/release/{{project_name}}
 
