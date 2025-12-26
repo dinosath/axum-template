@@ -25,11 +25,6 @@ questions:
     help: Please enter the version of the project
     default: "0.1.0"
 
-  project_edition:
-    type: str
-    help: Please enter the edition of the project
-    default: "2021"
-
   authentication:
     type: str
     help: What authentication method do you want to use?

@@ -224,6 +224,19 @@ pub async fn me(
     }))
 }
 
+/// Generate a random password
+fn generate_random_password(length: usize) -> String {
+    use rand::Rng;
+    const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+    let mut rng = rand::rng();
+    (0..length)
+        .map(|_| {
+            let idx = rng.random_range(0..CHARSET.len());
+            CHARSET[idx] as char
+        })
+        .collect()
+}
+
 /// Initialize authentication state components
 pub struct AuthState {
     pub account_repo: Arc<MemoryAccountRepository<Role, Group>>,
@@ -255,6 +268,38 @@ pub async fn setup_auth_state() -> AuthState {
             .expect("Failed to create secret repository"),
     );
     debug!("Secrets repository initialized");
+
+    // Seed admin user with random password
+    let admin_password = dotenvy::var("ADMIN_PASSWORD")
+        .unwrap_or_else(|_| generate_random_password(16));
+    
+    match AccountInsertService::insert("admin", &admin_password)
+        .with_roles(vec![Role::Admin])
+        .with_groups(vec![])
+        .into_repositories(
+            Arc::clone(&account_repo),
+            Arc::clone(&secret_repo),
+        )
+        .await
+    {
+        Ok(Some(_)) => {
+            info!("╔════════════════════════════════════════════════════════════╗");
+            info!("║           🔐 ADMIN USER CREATED SUCCESSFULLY 🔐            ║");
+            info!("╠════════════════════════════════════════════════════════════╣");
+            info!("║  Username: admin                                           ║");
+            info!("║  Password: {:<48} ║", admin_password);
+            info!("╠════════════════════════════════════════════════════════════╣");
+            info!("║  ⚠️  SAVE THIS PASSWORD - IT WON'T BE SHOWN AGAIN! ⚠️       ║");
+            info!("║  Set ADMIN_PASSWORD env var to use a custom password.      ║");
+            info!("╚════════════════════════════════════════════════════════════╝");
+        }
+        Ok(None) => {
+            info!("Admin user creation returned None - user may already exist");
+        }
+        Err(e) => {
+            info!("Admin user already exists or failed to create: {}", e);
+        }
+    }
 
     let cookie_template = CookieTemplate::recommended();
 
