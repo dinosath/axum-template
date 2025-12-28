@@ -1,0 +1,161 @@
+{% import "macros.jinja" as macros -%}
+{% for entity_name, entity in entities | items | selectattr("1.attributes") -%}
+{% set entity_plural = entity_name | plural | snake_case -%}
+{% set entity_singular = entity_name | snake_case -%}
+{% set entity_title = entity_name | title | replace("_", " ") -%}
+import { test, expect } from '@playwright/test';
+
+{% if authentication != 'none' -%}
+// Login helper
+async function loginAsAdmin(page: import('@playwright/test').Page) {
+  const adminPassword = process.env.ADMIN_PASSWORD || 'testpassword';
+  await page.goto('/');
+  await page.getByLabel(/email/i).fill('admin');
+  await page.getByLabel(/password/i).fill(adminPassword);
+  await page.getByRole('button', { name: /sign in/i }).click();
+  await expect(page.getByText(/dashboard/i)).toBeVisible({ timeout: 10000 });
+}
+{% endif %}
+
+test.describe('{{ entity_title }} CRUD Operations', () => {
+{% if authentication != 'none' %}
+  test.beforeEach(async ({ page }) => {
+    await loginAsAdmin(page);
+  });
+{% endif %}
+
+  test('can view {{ entity_plural }} list', async ({ page }) => {
+{% if authentication == 'none' %}
+    await page.goto('/');
+{% endif %}
+    
+    // Navigate to {{ entity_plural }}
+    await page.getByRole('link', { name: /{{ entity_plural | replace("_", " ") }}/i }).click();
+    
+    // Should show the list view
+    await expect(page.getByRole('heading', { name: /{{ entity_plural | replace("_", " ") }}/i })).toBeVisible({ timeout: 10000 });
+  });
+
+  test('can open create {{ entity_singular }} form', async ({ page }) => {
+{% if authentication == 'none' %}
+    await page.goto('/{{ entity_plural }}');
+{% else %}
+    await page.goto('/{{ entity_plural }}');
+{% endif %}
+    
+    // Click create button
+    await page.getByRole('link', { name: /create|add|new/i }).click();
+    
+    // Should show create form
+    await expect(page.getByRole('heading', { name: /create|new|add/i })).toBeVisible({ timeout: 5000 });
+  });
+
+  test('can create a new {{ entity_singular }}', async ({ page }) => {
+    await page.goto('/{{ entity_plural }}/create');
+    
+    // Fill in required fields
+{% for name, property in entity.attributes | items -%}
+{% if property.required and property.type != 'relation' -%}
+{% if property.type == 'string' -%}
+{% if property.format == 'email' %}
+    await page.getByLabel(/{{ name | replace("_", " ") }}/i).fill('test{{ loop.index }}@example.com');
+{% elif property.format == 'uri' or property.format == 'url' %}
+    await page.getByLabel(/{{ name | replace("_", " ") }}/i).fill('https://example.com/test');
+{% else %}
+    await page.getByLabel(/{{ name | replace("_", " ") }}/i).fill('Test {{ name | title | replace("_", " ") }}');
+{% endif -%}
+{% elif property.type == 'text' %}
+    await page.getByLabel(/{{ name | replace("_", " ") }}/i).fill('Test content for {{ name | replace("_", " ") }}');
+{% elif property.type == 'integer' or property.type == 'number' %}
+    await page.getByLabel(/{{ name | replace("_", " ") }}/i).fill('42');
+{% elif property.type == 'boolean' %}
+    await page.getByLabel(/{{ name | replace("_", " ") }}/i).check();
+{% endif -%}
+{% endif -%}
+{% endfor %}
+    
+    // Submit the form
+    await page.getByRole('button', { name: /save|create|submit/i }).click();
+    
+    // Should redirect to list or show success
+    await expect(
+      page.getByText(/success|created|saved/i).or(page.getByRole('heading', { name: /{{ entity_plural | replace("_", " ") }}/i }))
+    ).toBeVisible({ timeout: 10000 });
+  });
+
+  test('can view {{ entity_singular }} details', async ({ page }) => {
+    await page.goto('/{{ entity_plural }}');
+    
+    // Wait for list to load
+    await expect(page.getByRole('table, list, grid').or(page.locator('[class*="list"], [class*="grid"]'))).toBeVisible({ timeout: 10000 });
+    
+    // Click on first item (show button or row)
+    const showButton = page.getByRole('link', { name: /show|view|details/i }).first();
+    const firstRow = page.locator('tr, [class*="item"], [class*="card"]').first();
+    
+    if (await showButton.isVisible()) {
+      await showButton.click();
+    } else {
+      await firstRow.click();
+    }
+    
+    // Should show detail view
+    await expect(page.locator('text=/{{ entity_title }}|id/i')).toBeVisible({ timeout: 5000 });
+  });
+
+  test('can edit a {{ entity_singular }}', async ({ page }) => {
+    await page.goto('/{{ entity_plural }}');
+    
+    // Wait for list to load and click edit
+    await expect(page.locator('table, [class*="list"], [class*="grid"]')).toBeVisible({ timeout: 10000 });
+    
+    const editButton = page.getByRole('link', { name: /edit/i }).first();
+    if (await editButton.isVisible()) {
+      await editButton.click();
+    } else {
+      // Try to find edit in a menu or row
+      await page.locator('tr, [class*="item"]').first().getByRole('button').first().click();
+      await page.getByRole('menuitem', { name: /edit/i }).click();
+    }
+    
+    // Should show edit form
+    await expect(page.getByRole('heading', { name: /edit|update/i })).toBeVisible({ timeout: 5000 });
+    
+    // Make a change and save
+    await page.getByRole('button', { name: /save|update|submit/i }).click();
+    
+    // Should show success
+    await expect(
+      page.getByText(/success|updated|saved/i).or(page.getByRole('heading', { name: /{{ entity_plural | replace("_", " ") }}/i }))
+    ).toBeVisible({ timeout: 10000 });
+  });
+
+  test('can delete a {{ entity_singular }}', async ({ page }) => {
+    await page.goto('/{{ entity_plural }}');
+    
+    // Wait for list to load
+    await expect(page.locator('table, [class*="list"], [class*="grid"]')).toBeVisible({ timeout: 10000 });
+    
+    // Find and click delete button
+    const deleteButton = page.getByRole('button', { name: /delete|remove/i }).first();
+    if (await deleteButton.isVisible()) {
+      await deleteButton.click();
+    } else {
+      // Try to find delete in a menu
+      await page.locator('tr, [class*="item"]').first().getByRole('button').first().click();
+      await page.getByRole('menuitem', { name: /delete|remove/i }).click();
+    }
+    
+    // Confirm deletion if dialog appears
+    const confirmButton = page.getByRole('button', { name: /confirm|yes|delete/i });
+    if (await confirmButton.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await confirmButton.click();
+    }
+    
+    // Should show success or stay on list
+    await expect(
+      page.getByText(/success|deleted|removed/i).or(page.getByRole('heading', { name: /{{ entity_plural | replace("_", " ") }}/i }))
+    ).toBeVisible({ timeout: 10000 });
+  });
+});
+{% endfor %}

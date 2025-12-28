@@ -67,7 +67,7 @@ jobs:
         if: matrix.frontend != 'none'
         with:
           version: 10
-      - run: pnpm install
+      - run: pnpm install --no-frozen-lockfile
         if: matrix.frontend != 'none'
         working-directory: generated/frontend
       - run: pnpm run build
@@ -155,3 +155,36 @@ jobs:
       - name: Skip Docker build
         if: steps.check-dockerfile.outputs.exists == 'false'
         run: echo "⚠️ Dockerfile not found in generated project"
+
+      # E2E Tests
+      - name: Check if e2e tests exist
+        id: check-e2e
+        run: |
+          if [ -d "generated/e2e" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install e2e dependencies
+        if: steps.check-e2e.outputs.exists == 'true'
+        working-directory: generated/e2e
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Install Playwright browsers
+        if: steps.check-e2e.outputs.exists == 'true'
+        working-directory: generated/e2e
+        run: npx playwright install chromium --with-deps
+
+      - name: Run e2e tests
+        if: steps.check-e2e.outputs.exists == 'true'
+        working-directory: generated/e2e
+        run: pnpm test
+
+      - name: Upload Playwright report
+        if: steps.check-e2e.outputs.exists == 'true' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ matrix.protocol }}-${{ matrix.auth }}-${{ matrix.frontend }}
+          path: generated/e2e/playwright-report/
+          retention-days: 7
