@@ -80,6 +80,7 @@ pub async fn run() -> Result<(), Box<dyn Error>> {
         {% endif -%}
     };
     let app = Router::new()
+        .route("/api/health", axum::routing::get(|| async { "OK" }))
         {{ '.merge(static_router())' if frontend!='none' }}
         {{ '.nest("/auth", crate::services::auth::auth_routes())' if protocol=='rest' and authentication=='jwt' }}
         {{ '.nest("/auth", crate::services::oidc::auth_routes())' if protocol=='rest' and authentication=='oidc' }}
