@@ -296,7 +296,7 @@ impl SharedTestContext {
         println!("✅ Keycloak container started on port {}", keycloak_port);
 {% endif -%}
 
-{% if database == 'postgres' and use_sqlx_migrations -%}
+{% if database == 'postgres' and use_seaorm_migrations -%}
         // Note: We don't run migrations here - the server will do it on startup
         // This avoids potential connection pool issues
 {% endif -%}

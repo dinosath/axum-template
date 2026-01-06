@@ -3,10 +3,10 @@ use axum::Router;
 {% else -%}
 use tonic::transport::Server;
 {% endif -%}
-use log::{info, {{ 'error' if use_sqlx_migrations }}};
+use log::{info, {{ 'error' if use_seaorm_migrations }}};
 {% if database=='postgres' -%}
 use sea_orm::{Database, DatabaseConnection};
-{{ 'use sqlx::postgres::PgPoolOptions;' if use_sqlx_migrations -}}
+{{ 'use sea_orm_migration::MigratorTrait;' if use_seaorm_migrations -}}
 {% endif -%}
 use std::{env, error::Error};
 {% if protocol=='rest' -%}
@@ -39,10 +39,9 @@ use crate::services::{{ project_name | snake_case }}_service::{
 pub async fn init_db() -> Result<DatabaseConnection, Box<dyn std::error::Error>> {
     let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432".to_string());
     let db: DatabaseConnection = Database::connect(&database_url).await?;
-    {% if use_sqlx_migrations -%}
+    {% if use_seaorm_migrations -%}
     info!("🔄 Running database migrations...");
-    let pool = PgPoolOptions::new().max_connections(5).connect(&database_url).await?;
-    if let Err(e) = sqlx::migrate!("./migrations").run(&pool).await { error!("❌ Failed migrations: {e}"); return Err(e.into()); }
+    if let Err(e) = migration::Migrator::up(&db, None).await { error!("❌ Failed migrations: {e}"); return Err(e.into()); }
     info!("✅ Database migrations completed successfully!");
     {% else %}
     db.get_schema_registry("{{project_name}}::models::*").sync(&db).await?;

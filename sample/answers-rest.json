@@ -4,7 +4,7 @@
     "project_version": "0.1.0",
     "authentication": "none",
     "database": "postgres",
-    "use_sqlx_migrations": true,
+    "use_seaorm_migrations": true,
     "features": ["open-telemetry", "helm"],
     "protocol": "rest",
     "static_includes": [],
