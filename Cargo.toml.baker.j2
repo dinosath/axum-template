@@ -3,8 +3,15 @@ name = "{{project_name}}"
 version = "{{project_version}}"
 edition = "2024"
 publish = false
+{% if use_seaorm_migrations -%}
 
-# Faster dev builds - optimize dependencies but not the main crate
+[workspace]
+members = ["migration"]
+
+[workspace.dependencies]
+sea-orm-migration = { version = "2.0.0-rc.27", features = ["runtime-tokio-rustls", "sqlx-postgres"] }
+{% endif -%}
+
 [profile.dev]
 opt-level = 0
 debug = true
@@ -13,7 +20,6 @@ debug = true
 opt-level = 2
 debug = false
 
-# Faster test builds
 [profile.test]
 opt-level = 0
 debug = true
@@ -52,9 +58,9 @@ serde_json = { version = "1.0", default-features = false, features = ["std"] }
 static-serve = "0.4"
 {% endif -%}
 {% if database=='postgres' -%}
-sea-orm = { version = "2.0.0-rc.20", features = ["sqlx-postgres","runtime-tokio-rustls","macros","with-chrono","with-json","with-uuid","schema-sync","entity-registry","rbac"] }
+sea-orm = { version = "2.0.0-rc.27", features = ["sqlx-postgres","runtime-tokio-rustls","macros","with-chrono","with-json","with-uuid","schema-sync","entity-registry","rbac"] }
 {% if use_seaorm_migrations -%}
-sea-orm-migration = { version = "2.0.0-rc.20", features = ["runtime-tokio-rustls", "sqlx-postgres"] }
+sea-orm-migration.workspace = true
 migration = { path = "migration" }
 {% endif -%}
 {% endif -%}
@@ -62,14 +68,14 @@ utoipa = { version = "5.4", features = ["axum_extras", "uuid", "chrono"] }
 utoipa-axum = "0.2"
 utoipa-scalar = { version = "0.3", features = ["axum"] }
 {% if 'grpc'==protocol -%}
-prost = "0.13"
-tonic = "0.13"
-prost-types = "0.13"
+prost = "0.14"
+tonic = "0.14"
+prost-types = "0.14"
 {% endif -%}
-tokio = { version = "1.48", default-features = false, features = ["rt-multi-thread", "macros", "net", "signal"] }
+tokio = { version = "1.49", default-features = false, features = ["rt-multi-thread", "macros", "net", "signal"] }
 {% if 'grpc'==protocol -%}
 [build-dependencies]
-tonic-build = "0.13"
+tonic-build = "0.14"
 {% endif -%}
 {% if authentication=='oidc'-%}
 tower = { version = "0.5", default-features = false }
@@ -80,7 +86,7 @@ tower-sessions = { version = "0.14", default-features = false, features = ["memo
 testcontainers = "0.26"
 testcontainers-modules = { version = "0.14.0", features = ["postgres"] }
 {% if protocol == 'rest' -%}
-reqwest = { version = "0.12", features = ["json", "cookies"] }
+reqwest = { version = "0.13", features = ["json", "cookies"] }
 {% endif -%}
 tokio-test = "0.4"
 serial_test = "3.2"

@@ -3,7 +3,7 @@ use tonic::{Request, Response, Status};
 use log::{debug, error};
 use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, IntoActiveModel, ModelTrait, Set, ActiveEnum};
 use crate::services::grpc_utils::find_model_by_id;
-use chrono::Utc;
+use chrono::{Utc, NaiveDateTime};
 
 pub mod {{ project_name | snake_case }}_proto {
     tonic::include_proto!("{{ project_name | snake_case }}");
@@ -74,6 +74,13 @@ fn {{ message_snake }}_create_request_to_active_model(req: Create{{ message }}Re
         {% elif property.enum -%}
         {# Enum field - convert string to enum using ActiveEnum::try_from_value #}
         {{ name | snake_case }}: Set(req.{{ name | snake_case }}.and_then(|s| {{ message }}{{ name | pascal_case }}::try_from_value(&s).ok()).unwrap_or_default()),
+        {% elif property.type == 'datetime' or property.type == 'timestamp' -%}
+        {# DateTime field - convert string to NaiveDateTime #}
+        {% if property.required -%}
+        {{ name | snake_case }}: Set(req.{{ name | snake_case }}.and_then(|s| NaiveDateTime::parse_from_str(&s, "%Y-%m-%dT%H:%M:%S%.f").ok()).unwrap_or(now)),
+        {% else -%}
+        {{ name | snake_case }}: Set(req.{{ name | snake_case }}.and_then(|s| NaiveDateTime::parse_from_str(&s, "%Y-%m-%dT%H:%M:%S%.f").ok())),
+        {% endif -%}
         {% elif property.required -%}
         {{ name | snake_case }}: Set(req.{{ name | snake_case }}.unwrap_or_default()),
         {% else -%}
@@ -100,6 +107,13 @@ fn {{ message_snake }}_entity_to_reply(item: {{ message }}Model) -> {{ message }
         {% elif property.enum -%}
         {# Enum field - convert enum to string using into_value #}
         {{ name | snake_case }}: Some(item.{{ name | snake_case }}.into_value()),
+        {% elif property.type == 'datetime' or property.type == 'timestamp' -%}
+        {# DateTime field - convert NaiveDateTime to string #}
+        {% if property.required -%}
+        {{ name | snake_case }}: Some(item.{{ name | snake_case }}.format("%Y-%m-%dT%H:%M:%S%.f").to_string()),
+        {% else -%}
+        {{ name | snake_case }}: item.{{ name | snake_case }}.map(|dt| dt.format("%Y-%m-%dT%H:%M:%S%.f").to_string()),
+        {% endif -%}
         {% elif property.required -%}
         {{ name | snake_case }}: Some(item.{{ name | snake_case }}),
         {% else -%}
@@ -135,7 +149,8 @@ impl {{ message_snake }}_service_server::{{ message }}Service for {{ message }}S
         let req = request.into_inner();
         let model = find_model_by_id::<{{ message }}Entity>(&self.db, req.id.as_str()).await?;
         let mut active_model = model.into_active_model();
-        active_model.last_updated = Set(Utc::now().naive_utc());
+        let now = Utc::now().naive_utc();
+        active_model.last_updated = Set(now);
         {% for name, property in entity.attributes | items -%}
         {% if macros.relation_has_fk(property)=='true' -%}
         {# Relation field with FK - convert string to i32 foreign key #}
@@ -149,6 +164,13 @@ impl {{ message_snake }}_service_server::{{ message }}Service for {{ message }}S
         {% elif property.enum -%}
         {# Enum field - convert string to enum using ActiveEnum::try_from_value #}
         active_model.{{ name | snake_case }} = Set(req.{{ name | snake_case }}.and_then(|s| {{ message }}{{ name | pascal_case }}::try_from_value(&s).ok()).unwrap_or_default());
+        {% elif property.type == 'datetime' or property.type == 'timestamp' -%}
+        {# DateTime field - convert string to NaiveDateTime #}
+        {% if property.required -%}
+        active_model.{{ name | snake_case }} = Set(req.{{ name | snake_case }}.and_then(|s| NaiveDateTime::parse_from_str(&s, "%Y-%m-%dT%H:%M:%S%.f").ok()).unwrap_or(now));
+        {% else -%}
+        active_model.{{ name | snake_case }} = Set(req.{{ name | snake_case }}.and_then(|s| NaiveDateTime::parse_from_str(&s, "%Y-%m-%dT%H:%M:%S%.f").ok()));
+        {% endif -%}
         {% elif property.required -%}
         active_model.{{ name | snake_case }} = Set(req.{{ name | snake_case }}.unwrap_or_default());
         {% else -%}
