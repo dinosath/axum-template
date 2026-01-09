@@ -25,6 +25,8 @@ jobs:
         variant: [rest, rest-shadcn, rest-jwt, grpc]
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
       - uses: jdx/mise-action@v2
       - run: mise run ${{ matrix.variant }}
 
