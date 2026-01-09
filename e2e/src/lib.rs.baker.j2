@@ -1,13 +1,14 @@
+{% if frontend != 'none' %}
 use playwright_rs::{Browser, Playwright};
+{% endif %}
 use rstest::fixture;
 use std::path::PathBuf;
 use std::sync::Arc;
-use testcontainers::core::{ContainerPort, IntoContainerPort, WaitFor, logs::consumer::logging_consumer::LoggingConsumer};
-use testcontainers::runners::{AsyncBuilder, AsyncRunner};
+use testcontainers::core::IntoContainerPort;
+use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, GenericBuildableImage, GenericImage, ImageExt};
 use testcontainers_modules::postgres::Postgres;
 use tokio::sync::{Mutex, OnceCell as AsyncOnceCell};
-use tokio::io::AsyncBufReadExt;
 
 /// Shared test environment that manages container lifecycle
 pub struct TestEnvironment {
@@ -19,7 +20,8 @@ pub struct TestEnvironment {
     pub base_url: String,
 }
 
-/// Playwright browser wrapper for tests
+{% if frontend != 'none' %}
+/// Playwright browser wrapper for UI tests
 pub struct TestBrowser {
     pub browser: Browser,
     _playwright: Playwright,
@@ -39,6 +41,7 @@ impl TestBrowser {
         }
     }
 }
+{% endif %}
 
 /// Global singleton for test environment - uses tokio's AsyncOnceCell for proper async initialization
 static TEST_ENV: AsyncOnceCell<Arc<Mutex<TestEnvironment>>> = AsyncOnceCell::const_new();
@@ -101,8 +104,12 @@ impl TestEnvironment {
             .with_file(project_dir.join("Cargo.toml"), "Cargo.toml")
             .with_file(project_dir.join("Cargo.lock"), "Cargo.lock")
             .with_file(project_dir.join("src"), "src")
+{% if frontend != 'none' %}
             .with_file(project_dir.join("frontend"), "frontend")
+{% endif %}
+{% if use_seaorm_migrations %}
             .with_file(project_dir.join("migrations"), "migrations")
+{% endif %}
             .build_image()
             .await?;
 
@@ -215,13 +222,15 @@ pub async fn base_url(#[future] test_env: Arc<Mutex<TestEnvironment>>) -> String
     guard.base_url.clone()
 }
 
-/// Rstest fixture for Playwright browser
+{% if frontend != 'none' %}
+/// Rstest fixture for Playwright browser (UI tests)
 #[fixture]
 pub async fn browser() -> TestBrowser {
     TestBrowser::new().await
 }
+{% endif %}
 
-/// Rstest fixture for HTTP client
+/// Rstest fixture for HTTP client (API tests)
 #[fixture]
 pub fn http_client() -> reqwest::Client {
     reqwest::Client::new()
