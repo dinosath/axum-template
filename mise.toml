@@ -3,7 +3,7 @@ node = '24'
 rust = "latest"
 "github:aliev/baker" = "latest"
 "cargo:cargo-chef" = "latest"
-"npm:pnpm" = "latest"
+pnpm = "latest"
 
 [tasks.generate]
 description = "Generate the project files"

@@ -11,22 +11,20 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  MISE_EXPERIMENTAL: true
-
 jobs:
   ci:
     name: CI (${{ matrix.variant }})
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         variant: [rest, rest-shadcn, rest-jwt, grpc]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: true
-      - uses: jdx/mise-action@v2
+      - uses: jdx/mise-action@v3
+        with:
+          cache_key: "mise-${{ matrix.variant }}"
       - run: mise run ${{ matrix.variant }}
-
