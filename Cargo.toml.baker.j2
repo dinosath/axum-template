@@ -6,7 +6,7 @@ publish = false
 {% if use_seaorm_migrations -%}
 
 [workspace]
-members = ["migration"]
+members = ["migration","e2e"]
 
 [workspace.dependencies]
 sea-orm-migration = { version = "2.0.0-rc.27", features = ["runtime-tokio-rustls", "sqlx-postgres"] }
@@ -70,12 +70,13 @@ utoipa-scalar = { version = "0.3", features = ["axum"] }
 {% if 'grpc'==protocol -%}
 prost = "0.14"
 tonic = "0.14"
+tonic-prost = "0.14"
 prost-types = "0.14"
 {% endif -%}
 tokio = { version = "1.49", default-features = false, features = ["rt-multi-thread", "macros", "net", "signal"] }
 {% if 'grpc'==protocol -%}
 [build-dependencies]
-tonic-build = "0.14"
+tonic-prost-build = "0.14"
 {% endif -%}
 {% if authentication=='oidc'-%}
 tower = { version = "0.5", default-features = false }
