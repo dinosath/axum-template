@@ -22,7 +22,6 @@ depends = ["generate"]
 description = "Build the project"
 run = '''
 cd ./generated/$ANSWER
-cargo update
 cargo build --release
 '''
 
