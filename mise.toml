@@ -4,6 +4,7 @@ rust = "latest"
 "github:aliev/baker" = "latest"
 "cargo:cargo-chef" = "latest"
 pnpm = "latest"
+"npm:playwright" = "latest"
 
 [tasks.generate]
 description = "Generate the project files"
@@ -33,13 +34,21 @@ cargo test
 '''
 depends = ["build"]
 
+[tasks.docker-build]
+description = "Build Docker images"
+run = '''
+cd ./generated/$ANSWER
+docker build -t app-e2e-test .
+'''
+depends = ["test"]
+
 [tasks.e2e]
 description = "Run e2e tests"
 run = '''
 cd ./generated/$ANSWER/e2e
 cargo test
 '''
-depends = ["test"]
+depends = ["docker-build"]
 
 [tasks.rest]
 description = "Generate and build rest sample"

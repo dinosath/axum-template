@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use testcontainers::core::IntoContainerPort;
 use testcontainers::runners::AsyncRunner;
-use testcontainers::{ContainerAsync, GenericBuildableImage, GenericImage, ImageExt};
+use testcontainers::{ContainerAsync, GenericImage, ImageExt};
 use testcontainers_modules::postgres::Postgres;
 use tokio::sync::{Mutex, OnceCell as AsyncOnceCell};
 
@@ -97,24 +97,8 @@ impl TestEnvironment {
         );
         println!("DATABASE_URL for app: {}", database_url_for_app);
 
-        // Build app image - add entire project directory as build context
-        println!("Building app image...");
-        let app_image = GenericBuildableImage::new("app-e2e-test", "latest")
-            .with_dockerfile(project_dir.join("Dockerfile"))
-            .with_file(project_dir.join("Cargo.toml"), "Cargo.toml")
-            .with_file(project_dir.join("Cargo.lock"), "Cargo.lock")
-            .with_file(project_dir.join("src"), "src")
-{% if frontend != 'none' %}
-            .with_file(project_dir.join("frontend"), "frontend")
-{% endif %}
-{% if use_seaorm_migrations %}
-            .with_file(project_dir.join("migrations"), "migrations")
-{% endif %}
-            .build_image()
-            .await?;
-
         println!("Starting app container...");
-        let app_container = app_image
+        let app_container = GenericImage::new("app-e2e-test", "latest")
             .with_exposed_port(8080.tcp())
             .with_env_var("DATABASE_URL", &database_url_for_app)
             .with_env_var("RUST_LOG", "debug")

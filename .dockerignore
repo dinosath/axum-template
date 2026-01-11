@@ -3,3 +3,7 @@
 .idea
 .github
 target
+migration/target
+e2e/target
+frontend/node_modules
+frontend/dist
