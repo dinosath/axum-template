@@ -14,7 +14,7 @@ run = "baker . ./generated/$ANSWER --answers-file samples/answers-$ANSWER.json -
 [tasks.frontend]
 description = "Build frontend"
 run = '''
-cd {{cwd}}/generated/$ANSWER/frontend
+cd generated/$ANSWER/frontend
 pnpm install --no-frozen-lockfile
 pnpm run build
 '''
@@ -23,14 +23,14 @@ depends = ["generate"]
 [tasks.build]
 description = "Build the project"
 run = '''
-cd {{cwd}}/generated/$ANSWER
+cd generated/$ANSWER
 cargo build --release
 '''
 
 [tasks.test]
 description = "Run tests"
 run = '''
-cd {{cwd}}/generated/$ANSWER
+cd generated/$ANSWER
 cargo test
 '''
 depends = ["build"]
@@ -38,7 +38,7 @@ depends = ["build"]
 [tasks.docker-build]
 description = "Build Docker images"
 run = '''
-cd {{cwd}}/generated/$ANSWER
+cd generated/$ANSWER
 docker build -t app-e2e-test .
 '''
 depends = ["test"]
@@ -46,7 +46,7 @@ depends = ["test"]
 [tasks.e2e]
 description = "Run e2e tests"
 run = '''
-cd {{cwd}}/generated/$ANSWER/e2e
+cd generated/$ANSWER/e2e
 cargo test
 '''
 depends = ["docker-build"]
