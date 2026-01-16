@@ -3,6 +3,8 @@ node = '24'
 rust = "latest"
 "github:aliev/baker" = "latest"
 "cargo:cargo-chef" = "latest"
+"cargo:cargo-tarpaulin" = "latest"
+"cargo:cargo-deny" = "latest"
 pnpm = "latest"
 "npm:playwright" = "latest"
 protoc = "latest"
@@ -28,12 +30,20 @@ cargo build --release
 '''
 
 [tasks.test]
-description = "Run tests"
+description = "Run tests with code coverage"
 run = '''
 cd generated/$ANSWER
-cargo test
+cargo tarpaulin --out Html --out Lcov --output-dir target/coverage
 '''
 depends = ["build"]
+
+[tasks.audit]
+description = "Check for vulnerabilities using cargo deny"
+run = '''
+cd generated/$ANSWER
+cargo deny check
+'''
+depends = ["test"]
 
 [tasks.docker-build]
 description = "Build Docker images"
