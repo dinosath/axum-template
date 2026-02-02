@@ -5,7 +5,6 @@ mod common;
 
 use common::{TestContext, ResponseDetails};
 use serde_json::json;
-use serial_test::serial;
 
 {# Check if entity has required manyToOne or oneToOne relations #}
 {% set ns = namespace(has_required_relations=false, has_required_fields=false) -%}
@@ -325,7 +324,6 @@ fn update_{{ entity_name | snake_case }}_payload({% if ns.has_required_relations
 }
 
 #[tokio::test]
-#[serial]
 async fn test_{{ entity_name | snake_case }}_crud_operations() {
     let ctx = TestContext::new().await;
     let base_url = format!("{}/api/{{ entity.info.pluralName | default(entity_name | plural | snake_case) }}", ctx.base_url());
@@ -491,7 +489,7 @@ async fn test_{{ entity_name | snake_case }}_crud_operations() {
 
 {% if ns.has_required_fields or ns.has_required_relations -%}
 #[tokio::test]
-#[serial]
+
 async fn test_{{ entity_name | snake_case }}_validation() {
     let ctx = TestContext::new().await;
     let base_url = format!("{}/api/{{ entity.info.pluralName | default(entity_name | plural | snake_case) }}", ctx.base_url());
@@ -516,7 +514,6 @@ async fn test_{{ entity_name | snake_case }}_validation() {
 {% endif -%}
 
 #[tokio::test]
-#[serial]
 async fn test_{{ entity_name | snake_case }}_not_found() {
     let ctx = TestContext::new().await;
     let base_url = format!("{}/api/{{ entity.info.pluralName | default(entity_name | plural | snake_case) }}", ctx.base_url());
@@ -544,7 +541,6 @@ async fn test_{{ entity_name | snake_case }}_not_found() {
 
 {% if authentication != 'none' -%}
 #[tokio::test]
-#[serial]
 async fn test_{{ entity_name | snake_case }}_unauthorized_access() {
     let ctx = TestContext::new().await;
     let base_url = format!("{}/api/{{ entity.info.pluralName | default(entity_name | plural | snake_case) }}", ctx.base_url());
@@ -568,7 +564,6 @@ async fn test_{{ entity_name | snake_case }}_unauthorized_access() {
 {% endif -%}
 
 #[tokio::test]
-#[serial]
 async fn test_{{ entity_name | snake_case }}_patch_operations() {
     let ctx = TestContext::new().await;
     let base_url = format!("{}/api/{{ entity.info.pluralName | default(entity_name | plural | snake_case) }}", ctx.base_url());
@@ -658,7 +653,7 @@ async fn test_{{ entity_name | snake_case }}_patch_operations() {
 }
 
 #[tokio::test]
-#[serial]
+
 async fn test_{{ entity_name | snake_case }}_bulk_operations() {
     let ctx = TestContext::new().await;
     let base_url = format!("{}/api/{{ entity.info.pluralName | default(entity_name | plural | snake_case) }}", ctx.base_url());

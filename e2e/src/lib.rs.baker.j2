@@ -4,9 +4,9 @@ use playwright_rs::{Browser, Playwright};
 use rstest::fixture;
 use std::path::PathBuf;
 use std::sync::Arc;
-use testcontainers::core::IntoContainerPort;
+use testcontainers::core::{IntoContainerPort, WaitFor};
 use testcontainers::runners::AsyncRunner;
-use testcontainers::{ContainerAsync, GenericImage, ImageExt};
+use testcontainers::{ContainerAsync, GenericImage, ImageExt, RunnableImage};
 use testcontainers_modules::postgres::Postgres;
 use tokio::sync::{Mutex, OnceCell as AsyncOnceCell};
 
@@ -98,11 +98,16 @@ impl TestEnvironment {
         println!("DATABASE_URL for app: {}", database_url_for_app);
 
         println!("Starting app container...");
-        let app_container = GenericImage::new("app-e2e-test", "latest")
+        let app_image = GenericImage::new("{{project_name}}", "latest")
             .with_exposed_port(8080.tcp())
             .with_env_var("DATABASE_URL", &database_url_for_app)
-            .with_env_var("RUST_LOG", "debug")
-            .start().await?;
+            .with_env_var("RUST_LOG", "debug");
+        
+        // Use RunnableImage to prevent pulling from registry (use local image only)
+        let runnable = RunnableImage::from(app_image)
+            .with_tag("latest");
+        
+        let app_container = runnable.start().await?;
 
         let app_host = app_container.get_host().await?;
         let app_port = app_container.get_host_port_ipv4(8080).await?;
