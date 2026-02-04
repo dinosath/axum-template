@@ -9,7 +9,7 @@ exclude_globs:
   - "sample/**"
   - ".git/**"
   - "target/**"
-
+follow_symlinks: true
 questions:
   project_name:
     type: str
@@ -68,6 +68,7 @@ questions:
     multiselect: true
     default:
       - open-telemetry
+      - helm
     choices:
       - open-telemetry
       - helm

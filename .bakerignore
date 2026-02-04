@@ -5,8 +5,10 @@ templates/**
 macros.jinja
 .idea
 .github
-sample/**
-sample
+.git
+.gitmodules
+samples/**
+samples
 generated
 generated/**
 mise.toml

@@ -3,30 +3,17 @@ name = "{{project_name}}"
 version = "{{project_version}}"
 edition = "2024"
 publish = false
-{% if use_seaorm_migrations -%}
 
 [workspace]
-members = ["migration","e2e"]
+exclude = ["e2e"]
+{% if use_seaorm_migrations -%}
+members = ["migration"]
+
+
 
 [workspace.dependencies]
 sea-orm-migration = { version = "2.0.0-rc.28", features = ["runtime-tokio-rustls", "sqlx-postgres"] }
-{% endif -%}
-
-[profile.dev]
-opt-level = 0
-debug = true
-
-[profile.dev.package."*"]
-opt-level = 2
-debug = false
-
-[profile.test]
-opt-level = 0
-debug = true
-
-[profile.test.package."*"]
-opt-level = 2
-debug = false
+{% endif %}
 
 [profile.release]
 codegen-units = 1
@@ -84,7 +71,7 @@ tower-sessions = { version = "0.14", default-features = false, features = ["memo
 {% endif %}
 
 [dev-dependencies]
-axum-test = "17.0"
+axum-test = "18.7"
 testcontainers = "0.26"
 testcontainers-modules = { version = "0.14.0", features = ["postgres"] }
 {% if protocol == 'rest' -%}
